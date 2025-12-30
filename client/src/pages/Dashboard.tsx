@@ -1,21 +1,51 @@
 import { useEffect, useState } from 'react';
-import { getTraders, getStatus, getPositions, startTrader, stopTrader } from '../lib/api';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  getTraders,
+  getStatus,
+  getPositions,
+  getAccount,
+  startTrader,
+  stopTrader,
+} from '../lib/api';
 import type { Trader, Position } from '../types';
-import { Play, Square, RefreshCw, TrendingUp, TrendingDown, Activity, Wallet } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Play,
+  Square,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Wallet,
+  DollarSign,
+  Percent,
+  Target,
+  Zap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { GlassCard } from '@/components/ui/glass-card';
+import { GlowBadge } from '@/components/ui/glow-badge';
+import { StatCard, MiniStat, ProgressStat } from '@/components/ui/stat-card';
+import { SpotlightCard, AnimatedBorderCard } from '@/components/ui/spotlight-card';
+import { NumberTicker } from '@/components/ui/number-ticker';
+
+interface AccountInfo {
+  balance: number;
+  equity: number;
+  available_balance: number;
+  used_margin: number;
+}
 
 export default function Dashboard() {
   const [traders, setTraders] = useState<Trader[]>([]);
   const [selectedTrader, setSelectedTrader] = useState<string | null>(null);
   const [status, setStatus] = useState<any>(null);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [account, setAccount] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadTraders();
@@ -45,15 +75,20 @@ export default function Dashboard() {
 
   const loadTraderData = async () => {
     if (!selectedTrader) return;
+    setRefreshing(true);
     try {
-      const [statusRes, positionsRes] = await Promise.all([
+      const [statusRes, positionsRes, accountRes] = await Promise.all([
         getStatus(selectedTrader),
         getPositions(selectedTrader),
+        getAccount(selectedTrader).catch(() => ({ data: null })),
       ]);
       setStatus(statusRes.data);
       setPositions(positionsRes.data.positions || []);
+      setAccount(accountRes.data);
     } catch (err) {
       console.error('Failed to load trader data:', err);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -79,251 +114,366 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <motion.div
+            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          />
+          <span className="text-muted-foreground">Loading dashboard...</span>
+        </div>
       </div>
     );
   }
 
   const totalPnL = positions.reduce((sum, p) => sum + p.pnl, 0);
-  const totalPnLPercent = positions.length > 0
-    ? positions.reduce((sum, p) => sum + p.pnl_percent, 0) / positions.length
-    : 0;
+  const totalPnLPercent =
+    positions.length > 0
+      ? positions.reduce((sum, p) => sum + p.pnl_percent, 0) / positions.length
+      : 0;
+
+  const currentTrader = traders.find((t) => t.id === selectedTrader);
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Monitor your AI trading bots</p>
-        </div>
-        <Button variant="outline" size="icon" onClick={loadTraderData}>
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+        >
+          <h1 className="text-3xl font-bold text-gradient">Dashboard</h1>
+          <p className="text-muted-foreground">Monitor your AI trading bots in real-time</p>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-3"
+        >
+          {selectedTrader && status?.running && (
+            <GlowBadge variant="success" glow pulse dot>
+              Live Trading
+            </GlowBadge>
+          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={loadTraderData}
+            disabled={refreshing}
+            className="glass"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </motion.div>
       </div>
 
       {/* Stats Cards */}
-      {selectedTrader && status && (
+      {selectedTrader && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Status</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${status.running ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-                <span className="text-2xl font-bold">{status.running ? 'Running' : 'Stopped'}</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {status.strategy || 'Default Strategy'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Positions</CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{positions.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Active positions
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unrealized PnL</CardTitle>
-              {totalPnL >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-500" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-500" />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${totalPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                ${totalPnL.toFixed(2)}
-              </div>
-              <p className={`text-xs ${totalPnLPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {totalPnLPercent >= 0 ? '+' : ''}{totalPnLPercent.toFixed(2)}% avg
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Trading Pairs</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{status.pairs?.length || 0}</div>
-              <p className="text-xs text-muted-foreground truncate">
-                {status.pairs?.join(', ') || 'None'}
-              </p>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="Account Balance"
+            value={account?.balance || 0}
+            icon={DollarSign}
+            prefix="$"
+            decimals={2}
+            delay={0}
+          />
+          <StatCard
+            title="Equity"
+            value={account?.equity || 0}
+            icon={Wallet}
+            prefix="$"
+            decimals={2}
+            delay={1}
+          />
+          <StatCard
+            title="Unrealized PnL"
+            value={totalPnL}
+            icon={totalPnL >= 0 ? TrendingUp : TrendingDown}
+            prefix="$"
+            decimals={2}
+            colorize
+            change={totalPnLPercent}
+            changeLabel="avg"
+            delay={2}
+          />
+          <StatCard
+            title="Active Positions"
+            value={positions.length}
+            icon={Target}
+            decimals={0}
+            delay={3}
+          />
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Traders List */}
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Traders</CardTitle>
-            <CardDescription>Select a trader to view details</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {traders.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No traders configured. Go to Config to create one.</p>
-            ) : (
-              <ScrollArea className="h-[300px]">
-                <div className="space-y-2">
-                  {traders.map((trader) => (
-                    <div
+        <GlassCard className="lg:col-span-1 p-0 overflow-hidden">
+          <div className="p-4 border-b border-white/5">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />
+              Trading Bots
+            </h2>
+            <p className="text-sm text-muted-foreground">Select a bot to monitor</p>
+          </div>
+
+          {traders.length === 0 ? (
+            <div className="p-6 text-center">
+              <p className="text-muted-foreground text-sm">
+                No traders configured. Go to Config to create one.
+              </p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px]">
+              <div className="p-4 space-y-2">
+                <AnimatePresence>
+                  {traders.map((trader, index) => (
+                    <motion.div
                       key={trader.id}
-                      className={`flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer ${
-                        selectedTrader === trader.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
                       onClick={() => setSelectedTrader(trader.id)}
+                      className={`group cursor-pointer p-4 rounded-xl transition-all duration-200 ${
+                        selectedTrader === trader.id
+                          ? 'bg-primary/20 border border-primary/30'
+                          : 'bg-white/5 hover:bg-white/10 border border-transparent'
+                      }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-2">
                         <span className="font-medium">{trader.name}</span>
-                        <Badge variant={trader.is_running ? 'default' : 'secondary'}>
+                        <GlowBadge
+                          variant={trader.is_running ? 'success' : 'secondary'}
+                          dot={trader.is_running}
+                          pulse={trader.is_running}
+                        >
                           {trader.is_running ? 'Running' : 'Stopped'}
-                        </Badge>
+                        </GlowBadge>
                       </div>
-                      <div className="flex gap-1">
-                        {trader.is_running ? (
-                          <Button
-                            size="icon"
-                            variant="destructive"
-                            className="h-8 w-8"
-                            onClick={(e) => { e.stopPropagation(); handleStop(trader.id); }}
-                          >
-                            <Square className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            size="icon"
-                            variant="default"
-                            className="h-8 w-8 bg-green-600 hover:bg-green-500"
-                            onClick={(e) => { e.stopPropagation(); handleStart(trader.id); }}
-                          >
-                            <Play className="h-4 w-4" />
-                          </Button>
-                        )}
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          {trader.strategy_name || 'Default Strategy'}
+                        </span>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {trader.is_running ? (
+                            <Button
+                              size="icon"
+                              variant="destructive"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStop(trader.id);
+                              }}
+                            >
+                              <Square className="h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="icon"
+                              className="h-7 w-7 bg-green-600 hover:bg-green-500"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStart(trader.id);
+                              }}
+                            >
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
-                </div>
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
+                </AnimatePresence>
+              </div>
+            </ScrollArea>
+          )}
+        </GlassCard>
 
         {/* Main Content */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Trading Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedTrader && status ? (
-              <Tabs defaultValue="positions" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="positions">Positions</TabsTrigger>
-                  <TabsTrigger value="decisions">AI Decisions</TabsTrigger>
-                </TabsList>
+        <div className="lg:col-span-2 space-y-6">
+          {/* Positions Table */}
+          <GlassCard className="p-0 overflow-hidden">
+            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  <Target className="w-4 h-4 text-primary" />
+                  Open Positions
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {positions.length} active position{positions.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              {positions.length > 0 && (
+                <div className="flex items-center gap-4">
+                  <MiniStat
+                    label="Total PnL"
+                    value={`$${totalPnL.toFixed(2)}`}
+                    colorize
+                  />
+                </div>
+              )}
+            </div>
 
-                <TabsContent value="positions" className="mt-4">
-                  {positions.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No open positions
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Symbol</TableHead>
-                          <TableHead>Side</TableHead>
-                          <TableHead className="text-right">Size</TableHead>
-                          <TableHead className="text-right">Entry</TableHead>
-                          <TableHead className="text-right">Mark</TableHead>
-                          <TableHead className="text-right">PnL</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {positions.map((pos, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{pos.symbol}</TableCell>
-                            <TableCell>
-                              <Badge variant={pos.side === 'LONG' ? 'default' : 'destructive'}>
-                                {pos.side}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">{Math.abs(pos.amount).toFixed(4)}</TableCell>
-                            <TableCell className="text-right">${pos.entry_price.toFixed(2)}</TableCell>
-                            <TableCell className="text-right">${pos.mark_price.toFixed(2)}</TableCell>
-                            <TableCell className={`text-right font-medium ${pos.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                              ${pos.pnl.toFixed(2)} ({pos.pnl_percent.toFixed(2)}%)
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="decisions" className="mt-4">
-                  {status.decisions && Object.keys(status.decisions).length > 0 ? (
-                    <ScrollArea className="h-[300px]">
-                      <div className="space-y-3">
-                        {Object.entries(status.decisions).map(([symbol, dec]: [string, any]) => (
-                          <div key={symbol} className="p-4 rounded-lg bg-muted">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-semibold">{symbol}</span>
-                              <Badge variant={
-                                dec.action === 'BUY' ? 'default' :
-                                dec.action === 'SELL' ? 'destructive' :
-                                dec.action === 'CLOSE' ? 'outline' :
-                                'secondary'
-                              }>
-                                {dec.action}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-sm text-muted-foreground">Confidence:</span>
-                              <div className="flex-1 h-2 bg-background rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-primary transition-all"
-                                  style={{ width: `${dec.confidence}%` }}
-                                />
-                              </div>
-                              <span className="text-sm font-medium">{dec.confidence}%</span>
-                            </div>
-                            <Separator className="my-2" />
-                            <p className="text-sm text-muted-foreground">{dec.reasoning}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No recent AI decisions
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+            {positions.length === 0 ? (
+              <div className="p-12 text-center">
+                <Activity className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground">No open positions</p>
+                <p className="text-sm text-muted-foreground/60">
+                  Positions will appear here when the AI opens trades
+                </p>
+              </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                Select a trader to view activity
+              <div className="overflow-x-auto trading-table">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/5 text-left text-sm text-muted-foreground">
+                      <th className="p-4 font-medium">Symbol</th>
+                      <th className="p-4 font-medium">Side</th>
+                      <th className="p-4 font-medium text-right">Size</th>
+                      <th className="p-4 font-medium text-right">Entry</th>
+                      <th className="p-4 font-medium text-right">Mark</th>
+                      <th className="p-4 font-medium text-right">PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <AnimatePresence>
+                      {positions.map((pos, i) => (
+                        <motion.tr
+                          key={`${pos.symbol}-${i}`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                        >
+                          <td className="p-4 font-medium">{pos.symbol}</td>
+                          <td className="p-4">
+                            <GlowBadge
+                              variant={pos.side === 'LONG' ? 'success' : 'danger'}
+                            >
+                              {pos.side}
+                            </GlowBadge>
+                          </td>
+                          <td className="p-4 text-right font-mono">
+                            {Math.abs(pos.amount).toFixed(4)}
+                          </td>
+                          <td className="p-4 text-right font-mono">
+                            ${pos.entry_price.toFixed(2)}
+                          </td>
+                          <td className="p-4 text-right font-mono">
+                            ${pos.mark_price.toFixed(2)}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div
+                              className={`font-mono font-medium ${
+                                pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                              }`}
+                            >
+                              ${pos.pnl.toFixed(2)}
+                              <span className="text-xs ml-1 opacity-70">
+                                ({pos.pnl_percent >= 0 ? '+' : ''}
+                                {pos.pnl_percent.toFixed(2)}%)
+                              </span>
+                            </div>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  </tbody>
+                </table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </GlassCard>
+
+          {/* AI Decisions */}
+          <GlassCard className="p-0 overflow-hidden">
+            <div className="p-4 border-b border-white/5">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                AI Decisions
+              </h2>
+              <p className="text-sm text-muted-foreground">Recent trading signals from AI</p>
+            </div>
+
+            {status?.decisions && Object.keys(status.decisions).length > 0 ? (
+              <ScrollArea className="h-[300px]">
+                <div className="p-4 space-y-3">
+                  <AnimatePresence>
+                    {Object.entries(status.decisions).map(
+                      ([symbol, dec]: [string, any], index) => (
+                        <motion.div
+                          key={symbol}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                        >
+                          <SpotlightCard
+                            className="p-4"
+                            spotlightColor={
+                              dec.action === 'BUY'
+                                ? 'rgba(34, 197, 94, 0.1)'
+                                : dec.action === 'SELL'
+                                ? 'rgba(239, 68, 68, 0.1)'
+                                : 'rgba(59, 130, 246, 0.1)'
+                            }
+                          >
+                            <div className="flex justify-between items-center mb-3">
+                              <span className="font-semibold">{symbol}</span>
+                              <GlowBadge
+                                variant={
+                                  dec.action === 'BUY'
+                                    ? 'success'
+                                    : dec.action === 'SELL'
+                                    ? 'danger'
+                                    : dec.action === 'CLOSE'
+                                    ? 'warning'
+                                    : 'secondary'
+                                }
+                                glow
+                              >
+                                {dec.action}
+                              </GlowBadge>
+                            </div>
+
+                            <ProgressStat
+                              label="Confidence"
+                              value={dec.confidence}
+                              max={100}
+                              color={
+                                dec.confidence >= 70
+                                  ? 'success'
+                                  : dec.confidence >= 40
+                                  ? 'warning'
+                                  : 'danger'
+                              }
+                            />
+
+                            <Separator className="my-3 bg-white/5" />
+
+                            <p className="text-sm text-muted-foreground line-clamp-3">
+                              {dec.reasoning}
+                            </p>
+                          </SpotlightCard>
+                        </motion.div>
+                      )
+                    )}
+                  </AnimatePresence>
+                </div>
+              </ScrollArea>
+            ) : (
+              <div className="p-12 text-center">
+                <Activity className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground">No recent AI decisions</p>
+                <p className="text-sm text-muted-foreground/60">
+                  Decisions will appear here when the AI analyzes markets
+                </p>
+              </div>
+            )}
+          </GlassCard>
+        </div>
       </div>
     </div>
   );
