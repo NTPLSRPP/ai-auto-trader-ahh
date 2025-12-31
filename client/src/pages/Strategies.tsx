@@ -1,7 +1,35 @@
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { getStrategies, createStrategy, updateStrategy, deleteStrategy, getDefaultConfig } from '../lib/api';
 import type { Strategy, StrategyConfig } from '../types';
-import { Plus, Pencil, Trash2, X, Save } from 'lucide-react';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Save,
+  RefreshCw,
+  Layers,
+  Shield,
+  Activity,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Brain,
+  Target,
+  BarChart3,
+  Zap,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Slider } from '@/components/ui/slider';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { GlassCard } from '@/components/ui/glass-card';
+import { GlowBadge } from '@/components/ui/glow-badge';
+import { SpotlightCard } from '@/components/ui/spotlight-card';
 
 export default function Strategies() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -9,6 +37,12 @@ export default function Strategies() {
   const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [defaultConfig, setDefaultConfig] = useState<StrategyConfig | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    coinSource: true,
+    indicators: true,
+    riskControl: true,
+    aiPrompt: false,
+  });
 
   useEffect(() => {
     loadStrategies();
@@ -83,126 +117,255 @@ export default function Strategies() {
     }
   };
 
+  const toggleSection = (section: string) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const CollapsibleSection = ({
+    id,
+    title,
+    icon: Icon,
+    children,
+  }: {
+    id: string;
+    title: string;
+    icon: typeof Shield;
+    children: React.ReactNode;
+  }) => (
+    <GlassCard className="p-0 overflow-hidden">
+      <button
+        onClick={() => toggleSection(id)}
+        className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/20">
+            <Icon className="w-4 h-4 text-primary" />
+          </div>
+          <h3 className="font-medium">{title}</h3>
+        </div>
+        {expandedSections[id] ? (
+          <ChevronUp className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        )}
+      </button>
+      {expandedSections[id] && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          className="px-4 pb-4"
+        >
+          {children}
+        </motion.div>
+      )}
+    </GlassCard>
+  );
+
   if (loading) {
-    return <div className="p-8 text-center">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <motion.div
+            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          />
+          <span className="text-muted-foreground">Loading strategies...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Strategies</h1>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
         >
-          <Plus size={20} />
-          New Strategy
-        </button>
+          <h1 className="text-3xl font-bold text-gradient flex items-center gap-3">
+            <Layers className="w-8 h-8" />
+            Strategies
+          </h1>
+          <p className="text-muted-foreground">Configure trading strategies and risk parameters</p>
+        </motion.div>
+
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={loadStrategies} className="glass">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button onClick={handleCreate} disabled={!defaultConfig}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Strategy
+          </Button>
+        </div>
       </div>
 
       {/* Strategy List */}
       <div className="grid gap-4">
         {strategies.length === 0 ? (
-          <div className="bg-slate-800 rounded-lg p-8 text-center text-slate-400">
-            No strategies yet. Create one to get started.
-          </div>
+          <GlassCard className="p-12 text-center">
+            <Layers className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+            <h3 className="text-xl font-medium mb-2">No Strategies Yet</h3>
+            <p className="text-muted-foreground">Create a strategy to configure your trading rules.</p>
+          </GlassCard>
         ) : (
-          strategies.map((strategy) => (
-            <div
+          strategies.map((strategy, index) => (
+            <motion.div
               key={strategy.id}
-              className="bg-slate-800 rounded-lg p-4 hover:bg-slate-750 transition-colors"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
             >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-semibold text-lg">{strategy.name}</h3>
-                  <p className="text-slate-400 text-sm mt-1">{strategy.description || 'No description'}</p>
-                  <div className="flex gap-4 mt-3 text-sm text-slate-400">
-                    <span>Interval: {strategy.config.trading_interval}min</span>
-                    <span>Max Positions: {strategy.config.risk_control.max_positions}</span>
-                    <span>Min Confidence: {strategy.config.risk_control.min_confidence}%</span>
+              <SpotlightCard className="p-5">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 rounded-lg bg-primary/20">
+                        <Target className="w-4 h-4 text-primary" />
+                      </div>
+                      <h3 className="font-semibold text-lg">{strategy.name}</h3>
+                      <GlowBadge variant={strategy.is_active ? 'success' : 'secondary'}>
+                        {strategy.is_active ? 'Active' : 'Inactive'}
+                      </GlowBadge>
+                    </div>
+                    <p className="text-muted-foreground text-sm mb-3">
+                      {strategy.description || 'No description'}
+                    </p>
+
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="w-4 h-4 text-blue-400" />
+                        <span className="text-muted-foreground">Interval:</span>
+                        <span className="font-medium">{strategy.config.trading_interval}m</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Shield className="w-4 h-4 text-yellow-400" />
+                        <span className="text-muted-foreground">Max Positions:</span>
+                        <span className="font-medium">{strategy.config.risk_control.max_positions}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Activity className="w-4 h-4 text-green-400" />
+                        <span className="text-muted-foreground">Min Confidence:</span>
+                        <span className="font-medium">{strategy.config.risk_control.min_confidence}%</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap className="w-4 h-4 text-purple-400" />
+                        <span className="text-muted-foreground">Max Leverage:</span>
+                        <span className="font-medium">{strategy.config.risk_control.max_leverage}x</span>
+                      </div>
+                    </div>
+
+                    {/* Enabled Indicators */}
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {strategy.config.indicators.enable_ema && (
+                        <GlowBadge variant="secondary">EMA</GlowBadge>
+                      )}
+                      {strategy.config.indicators.enable_macd && (
+                        <GlowBadge variant="secondary">MACD</GlowBadge>
+                      )}
+                      {strategy.config.indicators.enable_rsi && (
+                        <GlowBadge variant="secondary">RSI</GlowBadge>
+                      )}
+                      {strategy.config.indicators.enable_atr && (
+                        <GlowBadge variant="secondary">ATR</GlowBadge>
+                      )}
+                      {strategy.config.indicators.enable_boll && (
+                        <GlowBadge variant="secondary">BOLL</GlowBadge>
+                      )}
+                      {strategy.config.indicators.enable_volume && (
+                        <GlowBadge variant="secondary">VOL</GlowBadge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="glass"
+                      onClick={() => { setEditingStrategy(strategy); setIsCreating(false); }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="glass text-red-400 hover:text-red-300"
+                      onClick={() => handleDelete(strategy.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setEditingStrategy(strategy); setIsCreating(false); }}
-                    className="p-2 hover:bg-slate-700 rounded"
-                  >
-                    <Pencil size={18} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(strategy.id)}
-                    className="p-2 hover:bg-slate-700 rounded text-red-400"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-            </div>
+              </SpotlightCard>
+            </motion.div>
           ))
         )}
       </div>
 
       {/* Strategy Editor Modal */}
-      {editingStrategy && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
-            <div className="flex justify-between items-center p-4 border-b border-slate-700">
-              <h2 className="text-xl font-semibold">
-                {isCreating ? 'Create Strategy' : 'Edit Strategy'}
-              </h2>
-              <button onClick={() => { setEditingStrategy(null); setIsCreating(false); }} className="p-2 hover:bg-slate-700 rounded">
-                <X size={20} />
-              </button>
-            </div>
+      <Dialog open={!!editingStrategy} onOpenChange={(open) => !open && setEditingStrategy(null)}>
+        <DialogContent className="max-w-4xl glass-card border-white/10 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              {isCreating ? 'Create Strategy' : 'Edit Strategy'}
+            </DialogTitle>
+          </DialogHeader>
 
-            <div className="p-4 space-y-6">
+          {editingStrategy && (
+            <div className="space-y-4 mt-4">
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">Name</label>
-                  <input
-                    type="text"
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input
                     value={editingStrategy.name}
                     onChange={(e) => setEditingStrategy({ ...editingStrategy, name: e.target.value })}
-                    className="w-full bg-slate-700 rounded px-3 py-2"
+                    className="glass"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">Description</label>
-                  <input
-                    type="text"
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Input
                     value={editingStrategy.description}
                     onChange={(e) => setEditingStrategy({ ...editingStrategy, description: e.target.value })}
-                    className="w-full bg-slate-700 rounded px-3 py-2"
+                    className="glass"
+                    placeholder="Describe your strategy"
                   />
                 </div>
               </div>
 
               {/* Coin Source */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Coin Source</h3>
+              <CollapsibleSection id="coinSource" title="Coin Source" icon={Target}>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Source Type</label>
-                    <select
+                  <div className="space-y-2">
+                    <Label>Source Type</Label>
+                    <Select
                       value={editingStrategy.config.coin_source.source_type}
-                      onChange={(e) => setEditingStrategy({
+                      onValueChange={(v) => setEditingStrategy({
                         ...editingStrategy,
                         config: {
                           ...editingStrategy.config,
-                          coin_source: { ...editingStrategy.config.coin_source, source_type: e.target.value }
+                          coin_source: { ...editingStrategy.config.coin_source, source_type: v }
                         }
                       })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
                     >
-                      <option value="static">Static List</option>
-                      <option value="top_volume">Top by Volume</option>
-                    </select>
+                      <SelectTrigger className="glass">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="static">Static List</SelectItem>
+                        <SelectItem value="top_volume">Top by Volume</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Trading Pairs (comma separated)</label>
-                    <input
-                      type="text"
+                  <div className="space-y-2">
+                    <Label>Trading Pairs</Label>
+                    <Input
                       value={editingStrategy.config.coin_source.static_coins.join(', ')}
                       onChange={(e) => setEditingStrategy({
                         ...editingStrategy,
@@ -214,224 +377,270 @@ export default function Strategies() {
                           }
                         }
                       })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
+                      className="glass"
                       placeholder="BTCUSDT, ETHUSDT"
                     />
                   </div>
                 </div>
-              </div>
+              </CollapsibleSection>
 
-              {/* Indicators */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Technical Indicators</h3>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Timeframe</label>
-                    <select
-                      value={editingStrategy.config.indicators.primary_timeframe}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          indicators: { ...editingStrategy.config.indicators, primary_timeframe: e.target.value }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    >
-                      <option value="1m">1 minute</option>
-                      <option value="5m">5 minutes</option>
-                      <option value="15m">15 minutes</option>
-                      <option value="1h">1 hour</option>
-                      <option value="4h">4 hours</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Kline Count</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.indicators.kline_count}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          indicators: { ...editingStrategy.config.indicators, kline_count: parseInt(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Trading Interval (min)</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.trading_interval}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: { ...editingStrategy.config, trading_interval: parseInt(e.target.value) }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                  {[
-                    { key: 'enable_ema', label: 'EMA' },
-                    { key: 'enable_macd', label: 'MACD' },
-                    { key: 'enable_rsi', label: 'RSI' },
-                    { key: 'enable_atr', label: 'ATR' },
-                    { key: 'enable_boll', label: 'Bollinger' },
-                    { key: 'enable_volume', label: 'Volume' },
-                  ].map((ind) => (
-                    <label key={ind.key} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={(editingStrategy.config.indicators as any)[ind.key]}
+              {/* Technical Indicators */}
+              <CollapsibleSection id="indicators" title="Technical Indicators" icon={BarChart3}>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Timeframe</Label>
+                      <Select
+                        value={editingStrategy.config.indicators.primary_timeframe}
+                        onValueChange={(v) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            indicators: { ...editingStrategy.config.indicators, primary_timeframe: v }
+                          }
+                        })}
+                      >
+                        <SelectTrigger className="glass">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1m">1 minute</SelectItem>
+                          <SelectItem value="5m">5 minutes</SelectItem>
+                          <SelectItem value="15m">15 minutes</SelectItem>
+                          <SelectItem value="1h">1 hour</SelectItem>
+                          <SelectItem value="4h">4 hours</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Kline Count</Label>
+                      <Input
+                        type="number"
+                        value={editingStrategy.config.indicators.kline_count}
                         onChange={(e) => setEditingStrategy({
                           ...editingStrategy,
                           config: {
                             ...editingStrategy.config,
-                            indicators: { ...editingStrategy.config.indicators, [ind.key]: e.target.checked }
+                            indicators: { ...editingStrategy.config.indicators, kline_count: parseInt(e.target.value) }
                           }
                         })}
-                        className="rounded"
+                        className="glass"
                       />
-                      <span>{ind.label}</span>
-                    </label>
-                  ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Trading Interval (min)</Label>
+                      <Input
+                        type="number"
+                        value={editingStrategy.config.trading_interval}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: { ...editingStrategy.config, trading_interval: parseInt(e.target.value) }
+                        })}
+                        className="glass"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 mt-4">
+                    {[
+                      { key: 'enable_ema', label: 'EMA', desc: 'Exponential Moving Average' },
+                      { key: 'enable_macd', label: 'MACD', desc: 'Moving Average Convergence' },
+                      { key: 'enable_rsi', label: 'RSI', desc: 'Relative Strength Index' },
+                      { key: 'enable_atr', label: 'ATR', desc: 'Average True Range' },
+                      { key: 'enable_boll', label: 'Bollinger', desc: 'Bollinger Bands' },
+                      { key: 'enable_volume', label: 'Volume', desc: 'Volume Analysis' },
+                    ].map((ind) => (
+                      <label
+                        key={ind.key}
+                        className="flex items-start gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+                      >
+                        <Checkbox
+                          checked={(editingStrategy.config.indicators as any)[ind.key]}
+                          onCheckedChange={(checked) => setEditingStrategy({
+                            ...editingStrategy,
+                            config: {
+                              ...editingStrategy.config,
+                              indicators: { ...editingStrategy.config.indicators, [ind.key]: checked }
+                            }
+                          })}
+                        />
+                        <div>
+                          <span className="font-medium">{ind.label}</span>
+                          <p className="text-xs text-muted-foreground">{ind.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </CollapsibleSection>
 
               {/* Risk Control */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Risk Control</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Max Positions</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.risk_control.max_positions}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          risk_control: { ...editingStrategy.config.risk_control, max_positions: parseInt(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
+              <CollapsibleSection id="riskControl" title="Risk Control" icon={Shield}>
+                <div className="space-y-6">
+                  {/* Sliders for visual parameters */}
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <Label>Max Positions</Label>
+                        <span className="text-sm font-mono text-primary">
+                          {editingStrategy.config.risk_control.max_positions}
+                        </span>
+                      </div>
+                      <Slider
+                        value={[editingStrategy.config.risk_control.max_positions]}
+                        onValueChange={([v]) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, max_positions: v }
+                          }
+                        })}
+                        min={1}
+                        max={20}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <Label>Max Leverage</Label>
+                        <span className="text-sm font-mono text-primary">
+                          {editingStrategy.config.risk_control.max_leverage}x
+                        </span>
+                      </div>
+                      <Slider
+                        value={[editingStrategy.config.risk_control.max_leverage]}
+                        onValueChange={([v]) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, max_leverage: v }
+                          }
+                        })}
+                        min={1}
+                        max={50}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <Label>Min Confidence</Label>
+                        <span className="text-sm font-mono text-primary">
+                          {editingStrategy.config.risk_control.min_confidence}%
+                        </span>
+                      </div>
+                      <Slider
+                        value={[editingStrategy.config.risk_control.min_confidence]}
+                        onValueChange={([v]) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, min_confidence: v }
+                          }
+                        })}
+                        min={0}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <Label>Max Position % of Balance</Label>
+                        <span className="text-sm font-mono text-primary">
+                          {editingStrategy.config.risk_control.max_position_percent}%
+                        </span>
+                      </div>
+                      <Slider
+                        value={[editingStrategy.config.risk_control.max_position_percent]}
+                        onValueChange={([v]) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, max_position_percent: v }
+                          }
+                        })}
+                        min={1}
+                        max={100}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Max Leverage</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.risk_control.max_leverage}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          risk_control: { ...editingStrategy.config.risk_control, max_leverage: parseInt(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Max Position % of Balance</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.risk_control.max_position_percent}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          risk_control: { ...editingStrategy.config.risk_control, max_position_percent: parseFloat(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Min Position USD</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.risk_control.min_position_usd}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          risk_control: { ...editingStrategy.config.risk_control, min_position_usd: parseFloat(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Min Confidence %</label>
-                    <input
-                      type="number"
-                      value={editingStrategy.config.risk_control.min_confidence}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          risk_control: { ...editingStrategy.config.risk_control, min_confidence: parseInt(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Min Risk/Reward Ratio</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={editingStrategy.config.risk_control.min_risk_reward_ratio}
-                      onChange={(e) => setEditingStrategy({
-                        ...editingStrategy,
-                        config: {
-                          ...editingStrategy.config,
-                          risk_control: { ...editingStrategy.config.risk_control, min_risk_reward_ratio: parseFloat(e.target.value) }
-                        }
-                      })}
-                      className="w-full bg-slate-700 rounded px-3 py-2"
-                    />
+
+                  {/* Numeric inputs for precise values */}
+                  <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                    <div className="space-y-2">
+                      <Label>Min Position USD</Label>
+                      <Input
+                        type="number"
+                        value={editingStrategy.config.risk_control.min_position_usd}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, min_position_usd: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className="glass"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Min Risk/Reward</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={editingStrategy.config.risk_control.min_risk_reward_ratio}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, min_risk_reward_ratio: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className="glass"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              </CollapsibleSection>
 
-              {/* Custom Prompt */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Custom AI Prompt (Optional)</h3>
-                <textarea
-                  value={editingStrategy.config.custom_prompt}
-                  onChange={(e) => setEditingStrategy({
-                    ...editingStrategy,
-                    config: { ...editingStrategy.config, custom_prompt: e.target.value }
-                  })}
-                  className="w-full bg-slate-700 rounded px-3 py-2 h-32 resize-none"
-                  placeholder="Add custom instructions for the AI trading decisions..."
-                />
+              {/* Custom AI Prompt */}
+              <CollapsibleSection id="aiPrompt" title="Custom AI Prompt" icon={Brain}>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Add custom instructions for the AI trading decisions. This will be appended to the system prompt.
+                  </p>
+                  <Textarea
+                    value={editingStrategy.config.custom_prompt}
+                    onChange={(e) => setEditingStrategy({
+                      ...editingStrategy,
+                      config: { ...editingStrategy.config, custom_prompt: e.target.value }
+                    })}
+                    className="glass min-h-[120px] resize-none"
+                    placeholder="Add custom instructions for the AI trading decisions..."
+                  />
+                </div>
+              </CollapsibleSection>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="outline" onClick={() => { setEditingStrategy(null); setIsCreating(false); }}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave}>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Strategy
+                </Button>
               </div>
             </div>
-
-            <div className="flex justify-end gap-3 p-4 border-t border-slate-700">
-              <button
-                onClick={() => { setEditingStrategy(null); setIsCreating(false); }}
-                className="px-4 py-2 hover:bg-slate-700 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
-              >
-                <Save size={18} />
-                Save Strategy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
