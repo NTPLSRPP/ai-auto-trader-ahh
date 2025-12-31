@@ -1,0 +1,28 @@
+services:
+  server:
+    image: lynchz/trader-ahh-server:latest
+    container_name: trader-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-deepseek/deepseek-chat}
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+      - API_PORT=8080
+    volumes:
+      - trader-data:/app/data
+
+  client:
+    image: lynchz/trader-ahh-client:latest
+    container_name: trader-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  trader-data:

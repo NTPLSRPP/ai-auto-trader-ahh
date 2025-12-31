@@ -1,0 +1,25 @@
+# Binary
+server
+auto-trader
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Data
+data/*.db
+*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+*_test.go
