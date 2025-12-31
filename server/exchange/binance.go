@@ -22,10 +22,11 @@ const (
 )
 
 type BinanceClient struct {
-	apiKey     string
-	secretKey  string
-	baseURL    string
-	httpClient *http.Client
+	apiKey           string
+	secretKey        string
+	baseURL          string
+	httpClient       *http.Client
+	serverTimeOffset int64 // Offset between local time and Binance server time (in ms)
 }
 
 type AccountInfo struct {
@@ -46,24 +47,24 @@ type Position struct {
 }
 
 type Order struct {
-	OrderID       int64   `json:"orderId"`
-	Symbol        string  `json:"symbol"`
-	Status        string  `json:"status"`
-	Side          string  `json:"side"`
-	PositionSide  string  `json:"positionSide"`
-	Type          string  `json:"type"`
-	Price         float64 `json:"price,string"`
-	AvgPrice      float64 `json:"avgPrice,string"`
-	OrigQty       float64 `json:"origQty,string"`
-	ExecutedQty   float64 `json:"executedQty,string"`
-	Time          int64   `json:"time"`
-	UpdateTime    int64   `json:"updateTime"`
+	OrderID      int64   `json:"orderId"`
+	Symbol       string  `json:"symbol"`
+	Status       string  `json:"status"`
+	Side         string  `json:"side"`
+	PositionSide string  `json:"positionSide"`
+	Type         string  `json:"type"`
+	Price        float64 `json:"price,string"`
+	AvgPrice     float64 `json:"avgPrice,string"`
+	OrigQty      float64 `json:"origQty,string"`
+	ExecutedQty  float64 `json:"executedQty,string"`
+	Time         int64   `json:"time"`
+	UpdateTime   int64   `json:"updateTime"`
 }
 
 type Ticker struct {
-	Symbol    string  `json:"symbol"`
-	Price     float64 `json:"price,string"`
-	Time      int64   `json:"time"`
+	Symbol string  `json:"symbol"`
+	Price  float64 `json:"price,string"`
+	Time   int64   `json:"time"`
 }
 
 type Kline struct {
@@ -82,19 +83,50 @@ func NewBinanceClient(apiKey, secretKey string, testnet bool) *BinanceClient {
 		baseURL = BinanceTestnetURL
 	}
 
-	return &BinanceClient{
+	client := &BinanceClient{
 		apiKey:    apiKey,
 		secretKey: secretKey,
 		baseURL:   baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		serverTimeOffset: 0,
 	}
+
+	// Sync time with Binance server
+	client.syncServerTime()
+
+	return client
+}
+
+// syncServerTime fetches server time and calculates offset
+func (c *BinanceClient) syncServerTime() {
+	localTime := time.Now().UnixMilli()
+
+	resp, err := c.httpClient.Get(c.baseURL + "/fapi/v1/time")
+	if err != nil {
+		log.Printf("[Binance] Failed to sync server time: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ServerTime int64 `json:"serverTime"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("[Binance] Failed to parse server time: %v", err)
+		return
+	}
+
+	c.serverTimeOffset = result.ServerTime - localTime
+	log.Printf("[Binance] Server time synced, offset: %dms", c.serverTimeOffset)
 }
 
 func (c *BinanceClient) sign(params url.Values) string {
-	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
-	params.Set("recvWindow", "5000")
+	// Use server time with offset for accurate timestamp
+	timestamp := time.Now().UnixMilli() + c.serverTimeOffset
+	params.Set("timestamp", strconv.FormatInt(timestamp, 10))
+	params.Set("recvWindow", "10000") // Increased from 5000 for more tolerance
 
 	h := hmac.New(sha256.New, []byte(c.secretKey))
 	h.Write([]byte(params.Encode()))
@@ -317,21 +349,21 @@ func (c *BinanceClient) SetLeverage(ctx context.Context, symbol string, leverage
 func getQuantityPrecision(symbol string) int {
 	// Binance Futures precision requirements
 	precisions := map[string]int{
-		"BTCUSDT":  3,
-		"ETHUSDT":  3,
-		"BNBUSDT":  2,
-		"SOLUSDT":  0,
-		"XRPUSDT":  1,
-		"DOGEUSDT": 0,
-		"ADAUSDT":  0,
-		"AVAXUSDT": 1,
-		"DOTUSDT":  1,
-		"LINKUSDT": 2,
+		"BTCUSDT":   3,
+		"ETHUSDT":   3,
+		"BNBUSDT":   2,
+		"SOLUSDT":   0,
+		"XRPUSDT":   1,
+		"DOGEUSDT":  0,
+		"ADAUSDT":   0,
+		"AVAXUSDT":  1,
+		"DOTUSDT":   1,
+		"LINKUSDT":  2,
 		"MATICUSDT": 0,
-		"LTCUSDT":  3,
-		"ATOMUSDT": 2,
-		"UNIUSDT":  1,
-		"XLMUSDT":  0,
+		"LTCUSDT":   3,
+		"ATOMUSDT":  2,
+		"UNIUSDT":   1,
+		"XLMUSDT":   0,
 	}
 	if p, ok := precisions[symbol]; ok {
 		return p
@@ -342,21 +374,21 @@ func getQuantityPrecision(symbol string) int {
 // getPricePrecision returns the price precision for a symbol
 func getPricePrecision(symbol string) int {
 	precisions := map[string]int{
-		"BTCUSDT":  1,
-		"ETHUSDT":  2,
-		"BNBUSDT":  2,
-		"SOLUSDT":  2,
-		"XRPUSDT":  4,
-		"DOGEUSDT": 5,
-		"ADAUSDT":  4,
-		"AVAXUSDT": 2,
-		"DOTUSDT":  3,
-		"LINKUSDT": 3,
+		"BTCUSDT":   1,
+		"ETHUSDT":   2,
+		"BNBUSDT":   2,
+		"SOLUSDT":   2,
+		"XRPUSDT":   4,
+		"DOGEUSDT":  5,
+		"ADAUSDT":   4,
+		"AVAXUSDT":  2,
+		"DOTUSDT":   3,
+		"LINKUSDT":  3,
 		"MATICUSDT": 4,
-		"LTCUSDT":  2,
-		"ATOMUSDT": 3,
-		"UNIUSDT":  3,
-		"XLMUSDT":  5,
+		"LTCUSDT":   2,
+		"ATOMUSDT":  3,
+		"UNIUSDT":   3,
+		"XLMUSDT":   5,
 	}
 	if p, ok := precisions[symbol]; ok {
 		return p
@@ -368,7 +400,7 @@ func getPricePrecision(symbol string) int {
 func (c *BinanceClient) PlaceOrder(ctx context.Context, symbol, side, orderType string, quantity float64, price float64) (*Order, error) {
 	params := url.Values{}
 	params.Set("symbol", symbol)
-	params.Set("side", side) // BUY or SELL
+	params.Set("side", side)      // BUY or SELL
 	params.Set("type", orderType) // MARKET or LIMIT
 
 	// Use proper precision for the symbol
