@@ -344,6 +344,7 @@ func (s *Server) handleTraders(w http.ResponseWriter, r *http.Request) {
 				"exchange":        t.Exchange,
 				"status":          t.Status,
 				"initial_balance": t.InitialBalance,
+				"config":          t.Config, // Include config for editing
 				"created_at":      t.CreatedAt,
 				"is_running":      s.engineManager.IsRunning(t.ID),
 			}

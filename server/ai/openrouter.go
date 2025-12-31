@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -44,9 +45,9 @@ type ChatResponse struct {
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
 	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    string `json:"code"`
+		Message string      `json:"message"`
+		Type    string      `json:"type"`
+		Code    interface{} `json:"code"` // Can be string or number depending on API response
 	} `json:"error,omitempty"`
 }
 
@@ -103,8 +104,15 @@ func (c *Client) Chat(messages []Message) (string, error) {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}
 
+	// Check for HTTP errors first
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
+	}
+
 	var chatResp ChatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		// Log the raw response for debugging
+		log.Printf("[OpenRouter] Failed to parse response: %v\nRaw response: %s", err, string(respBody))
 		return "", fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
