@@ -71,17 +71,36 @@ type IndicatorConfig struct {
 // RiskControlConfig defines risk management rules
 type RiskControlConfig struct {
 	// Position limits
-	MaxPositions       int     `json:"max_positions"`
-	MaxLeverage        int     `json:"max_leverage"`
-	MaxPositionPercent float64 `json:"max_position_percent"` // % of balance per position
+	MaxPositions int `json:"max_positions"`
 
-	// Risk limits
-	MaxMarginUsage float64 `json:"max_margin_usage"` // Max % of balance in margin
-	MinPositionUSD float64 `json:"min_position_usd"` // Minimum position size
+	// Leverage limits (separate for BTC/ETH vs altcoins)
+	BTCETHMaxLeverage  int `json:"btc_eth_max_leverage"`  // Max leverage for BTC/ETH (default: 10)
+	AltcoinMaxLeverage int `json:"altcoin_max_leverage"`  // Max leverage for altcoins (default: 20)
+
+	// Position value ratios (position size = equity * ratio)
+	BTCETHMaxPositionValueRatio  float64 `json:"btc_eth_max_position_value_ratio"`  // Max position value ratio for BTC/ETH (default: 5.0)
+	AltcoinMaxPositionValueRatio float64 `json:"altcoin_max_position_value_ratio"` // Max position value ratio for altcoins (default: 1.0)
+
+	// Minimum position sizes
+	MinPositionSize      float64 `json:"min_position_size"`        // Min position size for altcoins (default: 12 USDT)
+	MinPositionSizeBTCETH float64 `json:"min_position_size_btc_eth"` // Min position size for BTC/ETH (default: 60 USDT)
+
+	// Margin and buffer
+	MaxMarginUsage float64 `json:"max_margin_usage"` // Max % of balance in margin (default: 90)
+	MarginBuffer   float64 `json:"margin_buffer"`    // Safety buffer multiplier (default: 0.98 = use 98% of max)
 
 	// AI decision thresholds
-	MinConfidence      int     `json:"min_confidence"`       // Min AI confidence to trade
-	MinRiskRewardRatio float64 `json:"min_risk_reward_ratio"` // Min TP/SL ratio
+	MinConfidence      int     `json:"min_confidence"`        // Min AI confidence to trade (default: 70)
+	MinRiskRewardRatio float64 `json:"min_risk_reward_ratio"` // Min TP/SL ratio (default: 3.0)
+
+	// Daily loss and drawdown limits
+	MaxDailyLossPct  float64 `json:"max_daily_loss_pct"`  // Max daily loss % before stopping (default: 5.0)
+	MaxDrawdownPct   float64 `json:"max_drawdown_pct"`    // Max drawdown % from peak to close position (default: 40.0)
+	StopTradingMins  int     `json:"stop_trading_mins"`   // Minutes to pause after daily loss triggered (default: 60)
+
+	// Drawdown monitoring thresholds
+	DrawdownCloseThreshold float64 `json:"drawdown_close_threshold"` // Close position if drawdown from peak exceeds this % (default: 40.0)
+	MinProfitForDrawdown   float64 `json:"min_profit_for_drawdown"`  // Only apply drawdown close when profit > this % (default: 5.0)
 }
 
 // DefaultStrategyConfig returns a sensible default strategy
@@ -109,13 +128,36 @@ func DefaultStrategyConfig() StrategyConfig {
 			MACDSignal:       9,
 		},
 		RiskControl: RiskControlConfig{
-			MaxPositions:       3,
-			MaxLeverage:        10,
-			MaxPositionPercent: 20,
-			MaxMarginUsage:     80,
-			MinPositionUSD:     10,
+			MaxPositions: 3,
+
+			// Leverage limits
+			BTCETHMaxLeverage:  10,
+			AltcoinMaxLeverage: 20,
+
+			// Position value ratios
+			BTCETHMaxPositionValueRatio:  5.0,
+			AltcoinMaxPositionValueRatio: 1.0,
+
+			// Minimum position sizes
+			MinPositionSize:       12.0, // USDT for altcoins
+			MinPositionSizeBTCETH: 60.0, // USDT for BTC/ETH
+
+			// Margin settings
+			MaxMarginUsage: 90.0,
+			MarginBuffer:   0.98, // Use 98% of max affordable
+
+			// AI thresholds
 			MinConfidence:      70,
-			MinRiskRewardRatio: 1.5,
+			MinRiskRewardRatio: 3.0, // Minimum 3:1 reward/risk
+
+			// Daily loss and drawdown
+			MaxDailyLossPct: 5.0,  // Stop trading after 5% daily loss
+			MaxDrawdownPct:  40.0, // Max drawdown threshold
+			StopTradingMins: 60,   // Pause 60 mins after trigger
+
+			// Drawdown monitoring
+			DrawdownCloseThreshold: 40.0, // Close at 40% drawdown from peak
+			MinProfitForDrawdown:   5.0,  // Only apply when profit > 5%
 		},
 		CustomPrompt:    "",
 		TradingInterval: 5,
