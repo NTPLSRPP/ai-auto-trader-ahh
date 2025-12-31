@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"auto-trader/mcp"
+	"auto-trader-ahh/exchange"
+	"auto-trader-ahh/mcp"
 )
 
 // Manager manages multiple backtest runs
@@ -15,16 +16,18 @@ type Manager struct {
 	metadata map[string]*RunMetadata
 	cancels  map[string]context.CancelFunc
 	client   mcp.AIClient
+	exchange *exchange.BinanceClient
 	mu       sync.RWMutex
 }
 
 // NewManager creates a new backtest manager
-func NewManager(client mcp.AIClient) *Manager {
+func NewManager(client mcp.AIClient, exch *exchange.BinanceClient) *Manager {
 	return &Manager{
 		runners:  make(map[string]*Runner),
 		metadata: make(map[string]*RunMetadata),
 		cancels:  make(map[string]context.CancelFunc),
 		client:   client,
+		exchange: exch,
 	}
 }
 
@@ -32,6 +35,11 @@ func NewManager(client mcp.AIClient) *Manager {
 func (m *Manager) Start(ctx context.Context, cfg *Config) (string, error) {
 	if cfg.RunID == "" {
 		cfg.RunID = fmt.Sprintf("bt_%d", time.Now().UnixNano())
+	}
+
+	// Default timeframe if not set
+	if cfg.DecisionTimeframe == "" {
+		cfg.DecisionTimeframe = "5m"
 	}
 
 	m.mu.Lock()
@@ -51,6 +59,32 @@ func (m *Manager) Start(ctx context.Context, cfg *Config) (string, error) {
 		m.mu.Lock()
 		m.cancels[cfg.RunID] = cancel
 		m.mu.Unlock()
+
+		// Fetch klines from Binance if exchange client is available
+		if m.exchange != nil {
+			for _, symbol := range cfg.Symbols {
+				exchKlines, err := m.exchange.GetHistoricalKlines(runCtx, symbol, cfg.DecisionTimeframe, cfg.StartTS, cfg.EndTS)
+				if err != nil {
+					fmt.Printf("Backtest %s: failed to fetch klines for %s: %v\n", cfg.RunID, symbol, err)
+					continue
+				}
+				// Convert exchange.Kline to backtest.Kline
+				klines := make([]Kline, len(exchKlines))
+				for i, k := range exchKlines {
+					klines[i] = Kline{
+						OpenTime:  k.OpenTime,
+						Open:      k.Open,
+						High:      k.High,
+						Low:       k.Low,
+						Close:     k.Close,
+						Volume:    k.Volume,
+						CloseTime: k.CloseTime,
+					}
+				}
+				runner.LoadKlines(symbol, klines)
+				fmt.Printf("Backtest %s: loaded %d klines for %s\n", cfg.RunID, len(klines), symbol)
+			}
+		}
 
 		if err := runner.Start(runCtx); err != nil {
 			fmt.Printf("Backtest %s failed: %v\n", cfg.RunID, err)
@@ -136,7 +170,7 @@ func (m *Manager) ListRuns() []*RunMetadata {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var runs []*RunMetadata
+	runs := make([]*RunMetadata, 0, len(m.runners))
 	for _, runner := range m.runners {
 		runs = append(runs, runner.GetMetadata())
 	}

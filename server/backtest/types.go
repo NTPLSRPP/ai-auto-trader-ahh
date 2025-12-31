@@ -3,7 +3,7 @@ package backtest
 import (
 	"time"
 
-	"auto-trader/decision"
+	"auto-trader-ahh/decision"
 )
 
 // RunStatus represents the status of a backtest run

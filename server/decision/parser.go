@@ -15,7 +15,7 @@ var (
 	reJSONArray      = regexp.MustCompile(`(?s)\[[\s\S]*\]`)
 	reArrayHead      = regexp.MustCompile(`^\s*\[\s*\{`)
 	reArrayOpenSpace = regexp.MustCompile(`^\[\s+\{`)
-	reInvisibleRunes = regexp.MustCompile(`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\xFEFF\x200B-\x200F\x2028-\x202F\x2060-\x206F]`)
+	reInvisibleRunes = regexp.MustCompile(`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`)
 )
 
 // ParseFullDecisionResponse parses AI response into decisions

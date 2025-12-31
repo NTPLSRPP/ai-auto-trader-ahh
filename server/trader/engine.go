@@ -181,9 +181,9 @@ func (e *Engine) runTradingCycle(ctx context.Context) {
 		e.mu.Unlock()
 
 		// Save equity snapshot
-		e.equityStore.Create(&store.EquitySnapshot{
+		e.equityStore.Save(&store.EquitySnapshot{
 			TraderID:      e.id,
-			Equity:        account.TotalMarginBalance,
+			TotalEquity:   account.TotalMarginBalance,
 			Balance:       account.TotalWalletBalance,
 			UnrealizedPnL: account.TotalUnrealizedProfit,
 		})

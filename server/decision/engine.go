@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"auto-trader/mcp"
+	"auto-trader-ahh/mcp"
 )
 
 // Engine is the decision making engine that uses AI to make trading decisions

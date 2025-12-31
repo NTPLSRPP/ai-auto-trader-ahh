@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"auto-trader/decision"
-	"auto-trader/mcp"
+	"auto-trader-ahh/decision"
+	"auto-trader-ahh/mcp"
 )
 
 // Runner executes a backtest simulation
