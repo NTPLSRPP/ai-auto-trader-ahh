@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"auto-trader/decision"
-	"auto-trader/mcp"
+	"auto-trader-ahh/decision"
+	"auto-trader-ahh/mcp"
 )
 
 // Engine runs debate sessions
@@ -91,6 +91,18 @@ func (e *Engine) CreateSession(req *CreateSessionRequest) (*SessionWithDetails, 
 	e.eventChan[session.ID] = make(chan *Event, 100)
 
 	return session, nil
+}
+
+// ListSessions returns all sessions
+func (e *Engine) ListSessions() []*SessionWithDetails {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	sessions := make([]*SessionWithDetails, 0, len(e.sessions))
+	for _, s := range e.sessions {
+		sessions = append(sessions, s)
+	}
+	return sessions
 }
 
 // GetSession returns a session by ID
@@ -327,15 +339,16 @@ func (e *Engine) runDebate(ctx context.Context, session *SessionWithDetails, mar
 	return nil
 }
 
-// buildDebateSystemPrompt builds personality-enhanced system prompt
+// buildDebateSystemPrompt builds personality-enhanced system prompt (NOFX-style exact copy)
 func (e *Engine) buildDebateSystemPrompt(basePrompt string, participant *Participant, round, maxRounds int) string {
 	personality := GetPersonalityDescription(participant.Personality)
 	emoji := PersonalityEmojis[participant.Personality]
 
-	debateInstructions := fmt.Sprintf(`
+	debateInstructions := fmt.Sprintf(`You are a professional quantitative trading AI assistant participating in a multi-AI market debate.
+
 ## DEBATE MODE - ROUND %d/%d
 
-You are participating in a multi-AI market debate as %s %s.
+You are %s %s.
 
 ### Your Debate Role:
 %s
@@ -347,21 +360,82 @@ You are participating in a multi-AI market debate as %s %s.
 4. Be persuasive but data-driven
 5. Your personality should influence your analysis bias but not override data
 
-### Output Format
+## Decision Principles
 
-First write your analysis:
+### Risk First
+- Margin usage must not exceed 30%%
+- Must stop-loss when single position loss reaches -5%%
+- Capital protection first, profit second
+
+### Trailing Take-Profit
+- Consider partial/full profit-taking when PnL pulls back 30%% from peak
+- Example: Peak PnL +5%%, Current PnL +3.5%% → 30%% drawdown, should take profit
+
+### Trend Following
+- Only enter when trends align across multiple timeframes
+- Use Open Interest (OI) changes to validate capital flow authenticity
+- OI up + Price up = Strong bullish trend
+- OI down + Price up = Shorts covering (potential reversal)
+
+### Scale Operations
+- Scale-in: First entry max 50%% of target position
+- Scale-out: Close 33%% at +3%%, 50%% at +5%%, 100%% at +8%%
+- Only add to winning positions, never average down losers
+
+## Output Format (Strictly Follow)
+
+**Must use XML tags <reasoning> and <decision> to separate chain of thought and decision JSON**
+
 <reasoning>
-- Your market analysis for each symbol with specific data references
-- Your main trading thesis and arguments
-- Response to other participants (if round > 1)
+Your chain of thought analysis...
+- Analyze market conditions
+- Evaluate technical indicators
+- Consider risk factors
 </reasoning>
 
-Then output your decisions:
 <decision>
+`+"```json"+`
 [
-  {"symbol": "BTCUSDT", "action": "open_long", "confidence": 75, "leverage": 5, "position_pct": 0.3, "stop_loss": 0.02, "take_profit": 0.04, "reasoning": "Brief explanation"}
+  {
+    "symbol": "BTCUSDT",
+    "action": "open_long",
+    "leverage": 5,
+    "position_size_usd": 1000,
+    "stop_loss": 42000,
+    "take_profit": 48000,
+    "confidence": 85,
+    "reasoning": "Detailed reasoning explaining why this decision was made"
+  }
 ]
+`+"```"+`
 </decision>
+
+### Field Descriptions
+
+- **symbol**: Trading pair (required)
+- **action**: Action type (required)
+  - open_long: Open long position
+  - open_short: Open short position
+  - close_long: Close long position
+  - close_short: Close short position
+  - hold: Hold current position
+  - wait: Wait, take no action
+- **leverage**: Leverage multiplier (required for new positions)
+- **position_size_usd**: Position size in USDT (required for new positions)
+- **stop_loss**: Stop-loss price (required for new positions)
+- **take_profit**: Take-profit price (required for new positions)
+- **confidence**: Confidence level (0-100, opening recommended ≥70)
+- **reasoning**: Detailed reasoning (required, must explain decision basis)
+
+**IMPORTANT**: All numeric values must be calculated numbers, NOT formulas/expressions
+
+## Critical Reminders
+
+1. **Never** confuse realized and unrealized P&L
+2. **Always remember** leverage amplifies both gains and losses
+3. **Always watch** Peak PnL - it's key for take-profit decisions
+4. **Always combine** OI changes to validate trend authenticity
+5. **Always follow** risk management rules - capital protection is priority #1
 
 ---
 
@@ -407,12 +481,19 @@ func (e *Engine) collectVotes(ctx context.Context, session *SessionWithDetails, 
 
 The debate has concluded. Based on all the discussions, cast your final vote.
 
-Provide your final trading decisions in this format:
-<final_vote>
+**Use the same format as before with <reasoning> and <decision> tags:**
+
+<reasoning>
+Your final analysis summarizing the key points from the debate...
+</reasoning>
+
+<decision>
+` + "```json" + `
 [
-  {"symbol": "BTCUSDT", "action": "open_long", "confidence": 80, "leverage": 5, "position_pct": 0.25, "stop_loss": 0.02, "take_profit": 0.06, "reasoning": "Final reasoning"}
+  {"symbol": "BTCUSDT", "action": "open_long", "confidence": 80, "leverage": 5, "position_size_usd": 1000, "stop_loss": 42000, "take_profit": 48000, "reasoning": "Final reasoning"}
 ]
-</final_vote>
+` + "```" + `
+</decision>
 `
 
 	for _, participant := range session.Participants {
@@ -576,75 +657,229 @@ func (e *Engine) sendEvent(sessionID string, event *Event) {
 	}
 }
 
-// parseDecisions extracts decisions from AI response
-func parseDecisions(response string) ([]*Decision, int) {
-	decisionPattern := regexp.MustCompile(`(?s)<decision>\s*(.*?)\s*</decision>`)
-	finalVotePattern := regexp.MustCompile(`(?s)<final_vote>\s*(.*?)\s*</final_vote>`)
+// Pre-compiled regex patterns for better performance (NOFX-style)
+var (
+	// Safe regex: precisely match ```json code blocks
+	reJSONFence      = regexp.MustCompile(`(?is)` + "```json\\s*(\\[\\s*\\{.*?\\}\\s*\\])\\s*```")
+	reJSONArray      = regexp.MustCompile(`(?is)\[\s*\{.*?\}\s*\]`)
+	reArrayHead      = regexp.MustCompile(`^\[\s*\{`)
+	reInvisibleRunes = regexp.MustCompile("[\u200B\u200C\u200D\uFEFF]")
 
-	var jsonContent string
-	if matches := decisionPattern.FindStringSubmatch(response); len(matches) > 1 {
-		jsonContent = strings.TrimSpace(matches[1])
-	} else if matches := finalVotePattern.FindStringSubmatch(response); len(matches) > 1 {
-		jsonContent = strings.TrimSpace(matches[1])
+	// XML tag extraction (supports any characters in reasoning chain)
+	reReasoningTag = regexp.MustCompile(`(?s)<reasoning>(.*?)</reasoning>`)
+	reDecisionTag  = regexp.MustCompile(`(?s)<decision>(.*?)</decision>`)
+	reFinalVoteTag = regexp.MustCompile(`(?s)<final_vote>\s*(.*?)\s*</final_vote>`)
+)
+
+// fixMissingQuotes replaces curly/smart quotes and Chinese punctuation (NOFX-style)
+func fixMissingQuotes(s string) string {
+	// Smart quotes
+	s = strings.ReplaceAll(s, "\u201c", "\"") // "
+	s = strings.ReplaceAll(s, "\u201d", "\"") // "
+	s = strings.ReplaceAll(s, "\u2018", "'")  // '
+	s = strings.ReplaceAll(s, "\u2019", "'")  // '
+
+	// Chinese punctuation
+	s = strings.ReplaceAll(s, "［", "[")
+	s = strings.ReplaceAll(s, "］", "]")
+	s = strings.ReplaceAll(s, "｛", "{")
+	s = strings.ReplaceAll(s, "｝", "}")
+	s = strings.ReplaceAll(s, "：", ":")
+	s = strings.ReplaceAll(s, "，", ",")
+
+	// Chinese brackets
+	s = strings.ReplaceAll(s, "【", "[")
+	s = strings.ReplaceAll(s, "】", "]")
+	s = strings.ReplaceAll(s, "〔", "[")
+	s = strings.ReplaceAll(s, "〕", "]")
+	s = strings.ReplaceAll(s, "、", ",")
+
+	// Full-width space
+	s = strings.ReplaceAll(s, "　", " ")
+
+	return s
+}
+
+// removeInvisibleRunes removes invisible Unicode characters
+func removeInvisibleRunes(s string) string {
+	return reInvisibleRunes.ReplaceAllString(s, "")
+}
+
+// parseDecisions extracts decisions from AI response (NOFX-style robust parsing)
+func parseDecisions(response string) ([]*Decision, int) {
+	// Step 1: Clean up the response
+	s := removeInvisibleRunes(response)
+	s = strings.TrimSpace(s)
+	s = fixMissingQuotes(s)
+
+	var jsonPart string
+
+	// Step 2: Try to extract from <decision> tag first (NOFX style)
+	if match := reDecisionTag.FindStringSubmatch(s); match != nil && len(match) > 1 {
+		jsonPart = strings.TrimSpace(match[1])
+		log.Printf("✓ Extracted JSON using <decision> tag")
+	} else if match := reFinalVoteTag.FindStringSubmatch(s); match != nil && len(match) > 1 {
+		jsonPart = strings.TrimSpace(match[1])
+		log.Printf("✓ Extracted JSON using <final_vote> tag")
+	} else {
+		jsonPart = s
+		log.Printf("⚠️  <decision> tag not found, searching JSON in full text")
 	}
 
-	if jsonContent != "" {
-		// Try JSON array
+	// Apply quote fixes again
+	jsonPart = fixMissingQuotes(jsonPart)
+
+	// Step 3: Try to extract from ```json code fence
+	if m := reJSONFence.FindStringSubmatch(jsonPart); m != nil && len(m) > 1 {
+		jsonContent := strings.TrimSpace(m[1])
+		jsonContent = fixMissingQuotes(jsonContent)
+
 		var rawDecisions []struct {
-			Symbol      string  `json:"symbol"`
-			Action      string  `json:"action"`
-			Confidence  int     `json:"confidence"`
-			Leverage    int     `json:"leverage"`
-			PositionPct float64 `json:"position_pct"`
-			StopLoss    float64 `json:"stop_loss"`
-			TakeProfit  float64 `json:"take_profit"`
-			Reasoning   string  `json:"reasoning"`
+			Symbol          string  `json:"symbol"`
+			Action          string  `json:"action"`
+			Confidence      int     `json:"confidence"`
+			Leverage        int     `json:"leverage"`
+			PositionPct     float64 `json:"position_pct"`
+			PositionSizeUSD float64 `json:"position_size_usd"`
+			StopLoss        float64 `json:"stop_loss"`
+			TakeProfit      float64 `json:"take_profit"`
+			Reasoning       string  `json:"reasoning"`
 		}
 
 		if err := json.Unmarshal([]byte(jsonContent), &rawDecisions); err == nil && len(rawDecisions) > 0 {
-			var decisions []*Decision
-			totalConf := 0
-			for _, rd := range rawDecisions {
-				d := &Decision{
-					Symbol:      rd.Symbol,
-					Action:      rd.Action,
-					Confidence:  rd.Confidence,
-					Leverage:    rd.Leverage,
-					PositionPct: rd.PositionPct,
-					StopLoss:    rd.StopLoss,
-					TakeProfit:  rd.TakeProfit,
-					Reasoning:   rd.Reasoning,
-				}
-				decisions = append(decisions, d)
-				totalConf += rd.Confidence
-			}
-			avgConf := 50
-			if len(decisions) > 0 {
-				avgConf = totalConf / len(decisions)
-			}
-			return decisions, avgConf
+			return convertRawDecisions(rawDecisions)
 		}
+		log.Printf("⚠️  JSON parse error from code fence: %v", jsonContent[:min(100, len(jsonContent))])
 	}
 
-	// Fallback
-	return []*Decision{{
-		Symbol:     "ALL",
-		Action:     "wait",
-		Confidence: 50,
-		Reasoning:  "Failed to parse decisions",
-	}}, 50
+	// Step 4: Try to find raw JSON array
+	jsonContent := strings.TrimSpace(reJSONArray.FindString(jsonPart))
+	if jsonContent == "" {
+		// Fallback: Safe wait mode
+		log.Printf("⚠️  [SafeFallback] AI didn't output JSON decision, entering safe wait mode")
+
+		cotSummary := jsonPart
+		if len(cotSummary) > 240 {
+			cotSummary = cotSummary[:240] + "..."
+		}
+
+		return []*Decision{{
+			Symbol:     "ALL",
+			Action:     "wait",
+			Confidence: 50,
+			Reasoning:  fmt.Sprintf("Model didn't output structured JSON decision, entering safe wait; summary: %s", cotSummary),
+		}}, 50
+	}
+
+	jsonContent = fixMissingQuotes(jsonContent)
+
+	var rawDecisions []struct {
+		Symbol          string  `json:"symbol"`
+		Action          string  `json:"action"`
+		Confidence      int     `json:"confidence"`
+		Leverage        int     `json:"leverage"`
+		PositionPct     float64 `json:"position_pct"`
+		PositionSizeUSD float64 `json:"position_size_usd"`
+		StopLoss        float64 `json:"stop_loss"`
+		TakeProfit      float64 `json:"take_profit"`
+		Reasoning       string  `json:"reasoning"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonContent), &rawDecisions); err != nil {
+		log.Printf("⚠️  JSON parse error: %v", err)
+		log.Printf("JSON content: %s", jsonContent[:min(200, len(jsonContent))])
+
+		return []*Decision{{
+			Symbol:     "ALL",
+			Action:     "wait",
+			Confidence: 50,
+			Reasoning:  fmt.Sprintf("JSON parsing failed: %v", err),
+		}}, 50
+	}
+
+	return convertRawDecisions(rawDecisions)
 }
 
-// extractReasoning extracts reasoning from response
-func extractReasoning(response string) string {
-	reasoningPattern := regexp.MustCompile(`(?s)<reasoning>\s*(.*?)\s*</reasoning>`)
-	if matches := reasoningPattern.FindStringSubmatch(response); len(matches) > 1 {
-		return strings.TrimSpace(matches[1])
+// convertRawDecisions converts raw parsed decisions to Decision structs
+func convertRawDecisions(rawDecisions []struct {
+	Symbol          string  `json:"symbol"`
+	Action          string  `json:"action"`
+	Confidence      int     `json:"confidence"`
+	Leverage        int     `json:"leverage"`
+	PositionPct     float64 `json:"position_pct"`
+	PositionSizeUSD float64 `json:"position_size_usd"`
+	StopLoss        float64 `json:"stop_loss"`
+	TakeProfit      float64 `json:"take_profit"`
+	Reasoning       string  `json:"reasoning"`
+}) ([]*Decision, int) {
+	var decisions []*Decision
+	totalConf := 0
+
+	for _, rd := range rawDecisions {
+		// Use position_size_usd if available, otherwise convert position_pct
+		posPct := rd.PositionPct
+		if posPct == 0 && rd.PositionSizeUSD > 0 {
+			posPct = rd.PositionSizeUSD / 10000.0 // Assuming $10k account
+		}
+		if posPct == 0 {
+			posPct = 0.2 // Default 20%
+		}
+
+		d := &Decision{
+			Symbol:      rd.Symbol,
+			Action:      rd.Action,
+			Confidence:  rd.Confidence,
+			Leverage:    rd.Leverage,
+			PositionPct: posPct,
+			StopLoss:    rd.StopLoss,
+			TakeProfit:  rd.TakeProfit,
+			Reasoning:   rd.Reasoning,
+		}
+		decisions = append(decisions, d)
+		totalConf += rd.Confidence
 	}
+
+	avgConf := 50
+	if len(decisions) > 0 {
+		avgConf = totalConf / len(decisions)
+	}
+
+	log.Printf("✓ Parsed %d decisions, avg confidence: %d%%", len(decisions), avgConf)
+	return decisions, avgConf
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// extractReasoning extracts reasoning from response (NOFX-style)
+func extractReasoning(response string) string {
+	// Try <reasoning> tag first
+	if match := reReasoningTag.FindStringSubmatch(response); match != nil && len(match) > 1 {
+		log.Printf("✓ Extracted reasoning chain using <reasoning> tag")
+		return strings.TrimSpace(match[1])
+	}
+
+	// Try content before <decision> tag
+	if decisionIdx := strings.Index(response, "<decision>"); decisionIdx > 0 {
+		log.Printf("✓ Extracted content before <decision> tag as reasoning chain")
+		return strings.TrimSpace(response[:decisionIdx])
+	}
+
+	// Fallback: content before JSON
+	jsonStart := strings.Index(response, "[")
+	if jsonStart > 0 {
+		log.Printf("⚠️  Extracted reasoning chain using old format ([ character separator)")
+		return strings.TrimSpace(response[:jsonStart])
+	}
+
 	if len(response) > 500 {
 		return response[:500] + "..."
 	}
-	return response
+	return strings.TrimSpace(response)
 }
 
 // summarizeMessage creates a brief summary of a message

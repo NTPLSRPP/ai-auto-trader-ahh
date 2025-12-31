@@ -3,7 +3,7 @@ package debate
 import (
 	"time"
 
-	"auto-trader/decision"
+	"auto-trader-ahh/decision"
 )
 
 // Status represents debate session status
