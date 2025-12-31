@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8080/api';
+// Use relative path in production (nginx will proxy to server)
+// Use localhost in development
+const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:8080/api';
 
 const api = axios.create({
   baseURL: API_BASE,

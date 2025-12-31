@@ -3,8 +3,9 @@ services:
     image: lynchz/trader-ahh-server:latest
     container_name: trader-server
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    # No external ports - only accessible from within the Docker network
+    expose:
+      - "8080"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-deepseek/deepseek-chat}
@@ -14,6 +15,8 @@ services:
       - API_PORT=8080
     volumes:
       - trader-data:/app/data
+    networks:
+      - trader-network
 
   client:
     image: lynchz/trader-ahh-client:latest
@@ -23,6 +26,12 @@ services:
       - "80:80"
     depends_on:
       - server
+    networks:
+      - trader-network
+
+networks:
+  trader-network:
+    driver: bridge
 
 volumes:
   trader-data:
