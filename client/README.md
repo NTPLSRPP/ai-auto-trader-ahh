@@ -1,73 +1,181 @@
-# React + TypeScript + Vite
+# Passive Income Ahh - Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React frontend for the AI-powered trading platform.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **TailwindCSS** - Styling
+- **shadcn/ui** - UI components
+- **Framer Motion** - Animations
+- **Recharts** - Charts
+- **React Router** - Navigation
+- **Lucide Icons** - Icons
 
-## React Compiler
+## Quick Start
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# Install dependencies
+npm install
 
-## Expanding the ESLint configuration
+# Start development server
+npm run dev
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Build for production
+npm run build
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Preview production build
+npm run preview
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Project Structure
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```
+client/
+├── public/
+│   └── icon.svg           # App icon
+├── src/
+│   ├── components/
+│   │   ├── ui/           # shadcn/ui components
+│   │   └── Layout.tsx    # Main layout with sidebar
+│   ├── lib/
+│   │   ├── api.ts        # API client
+│   │   └── utils.ts      # Utilities
+│   ├── pages/
+│   │   ├── Dashboard.tsx # Main dashboard
+│   │   ├── Backtest.tsx  # Backtesting UI
+│   │   ├── Debate.tsx    # AI debate arena
+│   │   ├── Equity.tsx    # Equity charts
+│   │   ├── History.tsx   # Trade history
+│   │   ├── Strategies.tsx # Strategy management
+│   │   ├── Config.tsx    # API configuration
+│   │   └── Logs.tsx      # Decision logs
+│   ├── App.tsx           # Routes
+│   ├── main.tsx          # Entry point
+│   └── index.css         # Global styles
+├── index.html            # HTML template with SEO
+└── vite.config.ts        # Vite configuration
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Pages
+
+### Dashboard
+- Real-time trader status
+- Position monitoring
+- Quick actions (start/stop traders)
+- AI decision feed
+
+### Backtest
+- Configure backtest parameters
+- Run historical simulations
+- View equity curves
+- Performance metrics
+
+### Debate Arena
+- Create multi-AI debate sessions
+- Watch AI personalities discuss markets
+- View consensus decisions
+- Real-time message streaming (SSE)
+
+### Equity
+- Portfolio equity charts
+- Time range selection
+- Daily returns visualization
+
+### History
+- Complete trade log
+- Filter by symbol, side, date
+- View AI reasoning for each trade
+
+### Strategies
+- Create/edit trading strategies
+- Risk parameter configuration
+- AI model selection
+
+### Config
+- API key management
+- Exchange configuration
+- System settings
+
+## Design System
+
+### Theme
+- Dark-only glassmorphism design
+- Primary: Blue/Purple gradient
+- Background: `#0a0a0f`
+- Glass effects with blur/opacity
+
+### CSS Classes
+```css
+.glass-card       /* Glassmorphism card */
+.glass-sidebar    /* Sidebar with glass effect */
+.glow-border      /* Animated glow border */
+.glow-primary     /* Primary color glow */
+.text-gradient    /* Gradient text effect */
+.pulse-live       /* Live indicator pulse */
+```
+
+### Animation
+- Framer Motion for page transitions
+- Fade animations for loading states
+- Number tickers for live data
+
+## API Integration
+
+API client in `src/lib/api.ts`:
+
+```typescript
+import * as api from '@/lib/api';
+
+// Health check
+await api.checkHealth();
+
+// Traders
+const traders = await api.getTraders();
+await api.createTrader({ ... });
+await api.startTrader(id);
+await api.stopTrader(id);
+
+// Backtests
+await api.startBacktest({ ... });
+const backtests = await api.getBacktests();
+
+// Debates
+await api.createDebateSession({ ... });
+const sessions = await api.getDebateSessions();
+```
+
+## Environment
+
+The client connects to the backend at `http://localhost:8080` by default.
+
+To change the API URL, update `src/lib/api.ts`:
+
+```typescript
+const API_BASE = 'http://localhost:8080/api';
+```
+
+## Development
+
+```bash
+# Install new component (shadcn/ui)
+npx shadcn@latest add <component-name>
+
+# Format code
+npm run format
+
+# Lint
+npm run lint
+```
+
+## Building for Production
+
+```bash
+# Build
+npm run build
+
+# Output in dist/ folder
+# Serve with any static file server
 ```
