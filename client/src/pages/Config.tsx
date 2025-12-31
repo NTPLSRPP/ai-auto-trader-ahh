@@ -49,7 +49,7 @@ export default function Config() {
       initial_balance: 1000,
       config: {
         ai_provider: 'openrouter',
-        ai_model: 'anthropic/claude-sonnet-4',
+        ai_model: 'deepseek/deepseek-v3.2',
         api_key: '',
         secret_key: '',
         testnet: true,
@@ -92,11 +92,20 @@ export default function Config() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          />
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            <motion.div
+              className="absolute inset-0 border-4 border-primary/20 rounded-full"
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="w-4 h-4 bg-primary rounded" />
+            </motion.div>
+          </div>
           <span className="text-muted-foreground">Loading configuration...</span>
         </div>
       </div>
@@ -361,12 +370,12 @@ export default function Config() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="anthropic/claude-sonnet-4">Claude Sonnet 4</SelectItem>
-                        <SelectItem value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</SelectItem>
-                        <SelectItem value="openai/gpt-4o">GPT-4o</SelectItem>
-                        <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
-                        <SelectItem value="google/gemini-pro-1.5">Gemini Pro 1.5</SelectItem>
-                        <SelectItem value="deepseek/deepseek-chat">DeepSeek Chat</SelectItem>
+                        <SelectItem value="deepseek/deepseek-v3.2">DeepSeek V3.2</SelectItem>
+                        <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                        <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
+                        <SelectItem value="openai/gpt-oss-120b">GPT OSS 120B</SelectItem>
+                        <SelectItem value="x-ai/grok-4.1-fast">Grok 4.1 Fast</SelectItem>
+                        <SelectItem value="xiaomi/mimo-v2-flash">MiMo V2 Flash</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

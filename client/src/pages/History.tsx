@@ -21,6 +21,14 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { GlowBadge } from '@/components/ui/glow-badge';
 import { StatCard } from '@/components/ui/stat-card';
 
+interface RawDecision {
+  id: number;
+  trader_id: string;
+  timestamp: string;
+  decisions: string; // JSON string of decision array
+  executed: boolean;
+}
+
 interface Decision {
   id: string;
   trader_id: string;
@@ -77,7 +85,30 @@ export default function History() {
   const loadDecisions = async () => {
     try {
       const res = await getDecisions(selectedTrader);
-      setDecisions(res.data.decisions || []);
+      const rawDecisions: RawDecision[] = res.data.decisions || [];
+
+      // Flatten the nested decisions
+      const flatDecisions: Decision[] = [];
+      for (const raw of rawDecisions) {
+        try {
+          const innerDecisions = JSON.parse(raw.decisions || '[]');
+          for (const dec of innerDecisions) {
+            flatDecisions.push({
+              id: `${raw.id}-${dec.symbol}`,
+              trader_id: raw.trader_id,
+              symbol: dec.symbol || 'UNKNOWN',
+              action: dec.action || 'NONE',
+              confidence: dec.confidence || 0,
+              reasoning: dec.reasoning || dec.error || 'No reasoning provided',
+              executed: raw.executed,
+              created_at: raw.timestamp,
+            });
+          }
+        } catch {
+          // Skip malformed decisions
+        }
+      }
+      setDecisions(flatDecisions);
     } catch (err) {
       console.error('Failed to load decisions:', err);
     }
@@ -174,11 +205,20 @@ export default function History() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          />
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            <motion.div
+              className="absolute inset-0 border-4 border-primary/20 rounded-full"
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="w-4 h-4 bg-primary rounded" />
+            </motion.div>
+          </div>
           <span className="text-muted-foreground">Loading trade history...</span>
         </div>
       </div>
@@ -349,14 +389,14 @@ export default function History() {
                         <td className="p-4">
                           <GlowBadge
                             variant={
-                              decision.action.toLowerCase() === 'buy'
+                              decision.action?.toLowerCase() === 'buy'
                                 ? 'success'
-                                : decision.action.toLowerCase() === 'sell'
+                                : decision.action?.toLowerCase() === 'sell'
                                 ? 'danger'
                                 : 'secondary'
                             }
                           >
-                            {decision.action.toUpperCase()}
+                            {decision.action?.toUpperCase() || 'N/A'}
                           </GlowBadge>
                         </td>
                         <td className="p-4 text-right font-mono">{decision.confidence}%</td>
@@ -383,14 +423,14 @@ export default function History() {
                           {decision.symbol}
                           <GlowBadge
                             variant={
-                              decision.action.toLowerCase() === 'buy'
+                              decision.action?.toLowerCase() === 'buy'
                                 ? 'success'
-                                : decision.action.toLowerCase() === 'sell'
+                                : decision.action?.toLowerCase() === 'sell'
                                 ? 'danger'
                                 : 'secondary'
                             }
                           >
-                            {decision.action.toUpperCase()}
+                            {decision.action?.toUpperCase() || 'N/A'}
                           </GlowBadge>
                         </DialogTitle>
                       </DialogHeader>

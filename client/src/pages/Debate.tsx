@@ -10,6 +10,7 @@ import {
   Users,
   CheckCircle2,
   XCircle,
+  Brain,
 } from 'lucide-react';
 import {
   listDebates,
@@ -41,10 +42,12 @@ const PERSONALITIES = [
 ];
 
 const AI_MODELS = [
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
-  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
-  { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'deepseek' },
+  { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', provider: 'openrouter' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'openrouter' },
+  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', provider: 'openrouter' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B', provider: 'openrouter' },
+  { id: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'openrouter' },
+  { id: 'xiaomi/mimo-v2-flash', name: 'MiMo V2 Flash', provider: 'openrouter' },
 ];
 
 interface DebateSession {
@@ -89,6 +92,10 @@ export default function Debate() {
     trader_id: '',
     participants: [] as { ai_model_id: string; ai_model_name: string; provider: string; personality: string }[],
   });
+
+  // Selected model and personality for adding participants
+  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
+  const [selectedPersonality, setSelectedPersonality] = useState(PERSONALITIES[0].id);
 
   useEffect(() => {
     loadData();
@@ -167,7 +174,7 @@ export default function Debate() {
         participants: formData.participants,
       };
       const res = await createDebate(data);
-      setSelectedSession(res.data.session_id);
+      setSelectedSession(res.data.id || res.data.session_id);
       setShowCreateDialog(false);
       setFormData({
         name: '',
@@ -224,11 +231,24 @@ export default function Debate() {
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
           <motion.div
-            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          />
-          <span className="text-muted-foreground">Loading debates...</span>
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="relative"
+          >
+            <Brain className="w-12 h-12 text-primary" />
+            <motion.div
+              className="absolute inset-0 w-12 h-12 border-2 border-primary/30 rounded-full"
+              animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </motion.div>
+          <motion.span
+            className="text-muted-foreground"
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            Loading debates...
+          </motion.span>
         </div>
       </div>
     );
@@ -325,7 +345,7 @@ export default function Debate() {
                 <div className="space-y-3">
                   <Label>AI Participants ({formData.participants.length})</Label>
                   <div className="flex gap-2">
-                    <Select>
+                    <Select value={selectedModel} onValueChange={setSelectedModel}>
                       <SelectTrigger className="glass flex-1">
                         <SelectValue placeholder="Select AI Model" />
                       </SelectTrigger>
@@ -337,7 +357,7 @@ export default function Debate() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Select>
+                    <Select value={selectedPersonality} onValueChange={setSelectedPersonality}>
                       <SelectTrigger className="glass flex-1">
                         <SelectValue placeholder="Personality" />
                       </SelectTrigger>
@@ -349,6 +369,12 @@ export default function Debate() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Button
+                      variant="default"
+                      onClick={() => handleAddParticipant(selectedModel, selectedPersonality)}
+                    >
+                      Add
+                    </Button>
                   </div>
 
                   {/* Quick add buttons */}
@@ -359,7 +385,7 @@ export default function Debate() {
                         variant="outline"
                         size="sm"
                         className="glass"
-                        onClick={() => handleAddParticipant('gpt-4o-mini', p.id)}
+                        onClick={() => handleAddParticipant(selectedModel, p.id)}
                       >
                         {p.emoji} Add {p.name}
                       </Button>
@@ -536,22 +562,91 @@ export default function Debate() {
               {/* Messages Feed */}
               <GlassCard className="p-0 overflow-hidden">
                 <div className="p-4 border-b border-white/5">
-                  <h2 className="font-semibold">Debate Feed</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Round {sessionDetails.current_round} of {sessionDetails.max_rounds}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="font-semibold flex items-center gap-2">
+                        Debate Feed
+                        {sessionDetails.status === 'running' && (
+                          <motion.span
+                            className="w-2 h-2 bg-primary rounded-full"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                        )}
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        Round {sessionDetails.current_round} of {sessionDetails.max_rounds}
+                      </p>
+                    </div>
+                    {sessionDetails.status === 'running' && (
+                      <GlowBadge variant="info" pulse glow>
+                        <Brain className="w-3 h-3 mr-1" />
+                        AI Thinking...
+                      </GlowBadge>
+                    )}
+                    {sessionDetails.status === 'completed' && (
+                      <GlowBadge variant="success" glow>
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Completed
+                      </GlowBadge>
+                    )}
+                  </div>
+                  {/* Progress bar */}
+                  {sessionDetails.max_rounds > 0 && (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Progress</span>
+                        <span>{Math.round((sessionDetails.current_round / sessionDetails.max_rounds) * 100)}%</span>
+                      </div>
+                      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full bg-gradient-to-r from-primary to-blue-400"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(sessionDetails.current_round / sessionDetails.max_rounds) * 100}%` }}
+                          transition={{ duration: 0.5 }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <ScrollArea className="h-[400px]">
                   <div className="p-4 space-y-4">
                     {sessionDetails.messages?.length === 0 ? (
                       <div className="text-center py-12">
-                        <MessageSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                        <p className="text-muted-foreground">
-                          {sessionDetails.status === 'pending'
-                            ? 'Start the debate to see messages'
-                            : 'Waiting for messages...'}
-                        </p>
+                        {sessionDetails.status === 'running' ? (
+                          <>
+                            <motion.div
+                              className="flex items-center justify-center gap-2 mb-4"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                            >
+                              <Brain className="w-12 h-12 text-primary" />
+                              <motion.div
+                                className="absolute w-16 h-16 border-2 border-primary/20 rounded-full"
+                                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+                                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                              />
+                            </motion.div>
+                            <motion.p
+                              className="text-muted-foreground"
+                              animate={{ opacity: [0.5, 1, 0.5] }}
+                              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                            >
+                              AI participants are thinking...
+                            </motion.p>
+                            <p className="text-sm text-muted-foreground/60 mt-1">This may take a moment</p>
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                            <p className="text-muted-foreground">
+                              {sessionDetails.status === 'pending'
+                                ? 'Start the debate to see messages'
+                                : 'Waiting for messages...'}
+                            </p>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <AnimatePresence>
@@ -599,6 +694,39 @@ export default function Debate() {
                             </motion.div>
                           );
                         })}
+                        {/* Typing indicator when debate is running */}
+                        {sessionDetails.status === 'running' && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex items-center gap-3 p-4 rounded-lg bg-white/5 border border-white/10"
+                          >
+                            <div className="flex gap-1.5">
+                              <motion.div
+                                className="w-2 h-2 bg-primary rounded-full"
+                                animate={{ opacity: [0.3, 1, 0.3] }}
+                                transition={{ duration: 1.2, repeat: Infinity, delay: 0 }}
+                              />
+                              <motion.div
+                                className="w-2 h-2 bg-primary rounded-full"
+                                animate={{ opacity: [0.3, 1, 0.3] }}
+                                transition={{ duration: 1.2, repeat: Infinity, delay: 0.3 }}
+                              />
+                              <motion.div
+                                className="w-2 h-2 bg-primary rounded-full"
+                                animate={{ opacity: [0.3, 1, 0.3] }}
+                                transition={{ duration: 1.2, repeat: Infinity, delay: 0.6 }}
+                              />
+                            </div>
+                            <motion.span
+                              className="text-sm text-muted-foreground"
+                              animate={{ opacity: [0.6, 1, 0.6] }}
+                              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                            >
+                              AI is formulating response...
+                            </motion.span>
+                          </motion.div>
+                        )}
                       </AnimatePresence>
                     )}
                   </div>

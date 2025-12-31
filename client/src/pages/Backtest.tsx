@@ -40,30 +40,38 @@ import { GlowBadge } from '@/components/ui/glow-badge';
 import { StatCard, ProgressStat } from '@/components/ui/stat-card';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 
+interface BacktestConfig {
+  symbols: string[];
+  initial_balance: number;
+  start_ts: number;
+  end_ts: number;
+}
+
 interface BacktestRun {
   run_id: string;
   status: string;
-  symbols: string[];
-  start_date: string;
-  end_date: string;
-  initial_capital: number;
+  config: BacktestConfig;
+  started_at: string;
+  completed_at: string;
   current_equity: number;
   progress: number;
-  created_at: string;
+  error?: string;
 }
 
 interface BacktestMetrics {
-  total_pnl: number;
-  total_pnl_percent: number;
+  total_return: number;
+  total_return_pct: number;
   win_rate: number;
   total_trades: number;
   winning_trades: number;
   losing_trades: number;
   sharpe_ratio: number;
   max_drawdown: number;
+  max_drawdown_pct: number;
   avg_win: number;
   avg_loss: number;
   profit_factor: number;
+  final_equity: number;
 }
 
 interface EquityPoint {
@@ -98,7 +106,7 @@ export default function Backtest() {
     end_date: '',
     initial_capital: 10000,
     strategy_id: '',
-    ai_model: 'gpt-4o-mini',
+    ai_model: 'deepseek/deepseek-v3.2',
   });
 
   useEffect(() => {
@@ -114,13 +122,14 @@ export default function Backtest() {
   const loadData = async () => {
     try {
       const [runsRes, strategiesRes] = await Promise.all([
-        listBacktests().catch(() => ({ data: { runs: [] } })),
+        listBacktests().catch(() => ({ data: { backtests: [] } })),
         getStrategies().catch(() => ({ data: { strategies: [] } })),
       ]);
-      setRuns(runsRes.data.runs || []);
+      const backtests = runsRes.data.backtests || [];
+      setRuns(backtests);
       setStrategies(strategiesRes.data.strategies || []);
-      if (runsRes.data.runs?.length > 0 && !selectedRun) {
-        setSelectedRun(runsRes.data.runs[0].run_id);
+      if (backtests.length > 0 && !selectedRun) {
+        setSelectedRun(backtests[0].run_id);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -187,11 +196,20 @@ export default function Backtest() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          />
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            <motion.div
+              className="absolute inset-0 border-4 border-primary/20 rounded-full"
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="w-4 h-4 bg-primary rounded" />
+            </motion.div>
+          </div>
           <span className="text-muted-foreground">Loading backtests...</span>
         </div>
       </div>
@@ -300,10 +318,12 @@ export default function Backtest() {
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                  <SelectItem value="claude-3-5-sonnet">Claude 3.5 Sonnet</SelectItem>
-                  <SelectItem value="deepseek-chat">DeepSeek Chat</SelectItem>
+                  <SelectItem value="deepseek/deepseek-v3.2">DeepSeek V3.2</SelectItem>
+                  <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                  <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
+                  <SelectItem value="openai/gpt-oss-120b">GPT OSS 120B</SelectItem>
+                  <SelectItem value="x-ai/grok-4.1-fast">Grok 4.1 Fast</SelectItem>
+                  <SelectItem value="xiaomi/mimo-v2-flash">MiMo V2 Flash</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -315,7 +335,11 @@ export default function Backtest() {
             >
               {creating ? (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <motion.div
+                    className="w-4 h-4 mr-2 bg-current rounded-sm"
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  />
                   Starting...
                 </>
               ) : (
@@ -351,7 +375,7 @@ export default function Backtest() {
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium truncate">
-                          {run.symbols.join(', ')}
+                          {run.config?.symbols?.join(', ') || 'No symbols'}
                         </span>
                         <GlowBadge
                           variant={
@@ -359,6 +383,8 @@ export default function Backtest() {
                               ? 'info'
                               : run.status === 'completed'
                               ? 'success'
+                              : run.status === 'failed'
+                              ? 'danger'
                               : 'secondary'
                           }
                           pulse={run.status === 'running'}
@@ -367,7 +393,7 @@ export default function Backtest() {
                         </GlowBadge>
                       </div>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>${run.initial_capital.toLocaleString()}</span>
+                        <span>${(run.config?.initial_balance || 0).toLocaleString()}</span>
                         <div className="flex gap-1">
                           <Button
                             size="icon"
@@ -382,6 +408,11 @@ export default function Backtest() {
                           </Button>
                         </div>
                       </div>
+                      {run.error && (
+                        <div className="mt-2 text-xs text-red-400 truncate">
+                          {run.error}
+                        </div>
+                      )}
                       {run.status === 'running' && (
                         <div className="mt-2">
                           <ProgressStat
@@ -408,12 +439,12 @@ export default function Backtest() {
                 <div className="grid gap-4 md:grid-cols-4">
                   <StatCard
                     title="Total PnL"
-                    value={metrics.total_pnl}
-                    icon={metrics.total_pnl >= 0 ? TrendingUp : TrendingDown}
+                    value={metrics.total_return}
+                    icon={metrics.total_return >= 0 ? TrendingUp : TrendingDown}
                     prefix="$"
                     decimals={2}
                     colorize
-                    change={metrics.total_pnl_percent}
+                    change={metrics.total_return_pct}
                     delay={0}
                   />
                   <StatCard
@@ -598,7 +629,7 @@ export default function Backtest() {
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Max Drawdown</span>
                               <span className="font-medium text-red-400">
-                                {metrics.max_drawdown.toFixed(2)}%
+                                {metrics.max_drawdown_pct.toFixed(2)}%
                               </span>
                             </div>
                             <div className="flex justify-between">

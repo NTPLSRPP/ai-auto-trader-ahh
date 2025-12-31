@@ -166,11 +166,20 @@ export default function Strategies() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          />
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            <motion.div
+              className="absolute inset-0 border-4 border-primary/20 rounded-full"
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="w-4 h-4 bg-primary rounded" />
+            </motion.div>
+          </div>
           <span className="text-muted-foreground">Loading strategies...</span>
         </div>
       </div>

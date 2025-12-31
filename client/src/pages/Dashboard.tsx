@@ -30,10 +30,10 @@ import { StatCard, MiniStat, ProgressStat } from '@/components/ui/stat-card';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 
 interface AccountInfo {
-  balance: number;
-  equity: number;
-  available_balance: number;
-  used_margin: number;
+  wallet_balance: number;
+  total_equity: number;
+  available: number;
+  unrealized_pnl: number;
 }
 
 export default function Dashboard() {
@@ -114,11 +114,20 @@ export default function Dashboard() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          />
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            <motion.div
+              className="absolute inset-0 border-4 border-primary/20 rounded-full"
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="w-4 h-4 bg-primary rounded" />
+            </motion.div>
+          </div>
           <span className="text-muted-foreground">Loading dashboard...</span>
         </div>
       </div>
@@ -159,7 +168,7 @@ export default function Dashboard() {
             disabled={refreshing}
             className="glass"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 transition-opacity ${refreshing ? 'opacity-50' : ''}`} />
           </Button>
         </motion.div>
       </div>
@@ -169,7 +178,7 @@ export default function Dashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Account Balance"
-            value={account?.balance || 0}
+            value={account?.wallet_balance || 0}
             icon={DollarSign}
             prefix="$"
             decimals={2}
@@ -177,7 +186,7 @@ export default function Dashboard() {
           />
           <StatCard
             title="Equity"
-            value={account?.equity || 0}
+            value={account?.total_equity || 0}
             icon={Wallet}
             prefix="$"
             decimals={2}
