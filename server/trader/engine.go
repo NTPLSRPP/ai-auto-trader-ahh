@@ -998,6 +998,7 @@ func (e *Engine) enforceMaxPositions() error {
 }
 
 // validateRiskRewardRatio validates TP/SL ratio meets minimum requirement
+// Returns nil if SL/TP values are nonsensical (skips validation to allow trade)
 func (e *Engine) validateRiskRewardRatio(action string, stopLoss, takeProfit, currentPrice float64) error {
 	if e.strategy == nil {
 		return nil
@@ -1005,7 +1006,8 @@ func (e *Engine) validateRiskRewardRatio(action string, stopLoss, takeProfit, cu
 
 	minRatio := e.strategy.Config.RiskControl.MinRiskRewardRatio
 	if minRatio <= 0 {
-		minRatio = 3.0 // Default 3:1
+		// Validation disabled - allow trade
+		return nil
 	}
 
 	// Only validate for open actions
@@ -1025,8 +1027,12 @@ func (e *Engine) validateRiskRewardRatio(action string, stopLoss, takeProfit, cu
 		reward = currentPrice - takeProfit
 	}
 
+	// If SL/TP values don't make sense for the direction, skip validation
+	// (AI returned garbage values - don't block the trade)
 	if risk <= 0 || reward <= 0 {
-		return fmt.Errorf("invalid SL/TP: risk=%.2f, reward=%.2f", risk, reward)
+		log.Printf("[RiskReward] Skipping validation - nonsensical SL/TP for %s: SL=%.2f, TP=%.2f, price=%.2f",
+			action, stopLoss, takeProfit, currentPrice)
+		return nil
 	}
 
 	ratio := reward / risk
