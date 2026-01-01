@@ -372,56 +372,85 @@ export default function Config() {
               {/* AI Settings */}
               <GlassCard className="p-4">
                 <h3 className="font-medium mb-4">AI Settings</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>AI Provider</Label>
-                    <Select
-                      value={editingTrader.config?.ai_provider || 'openrouter'}
-                      onValueChange={(v) => setEditingTrader({
-                        ...editingTrader,
-                        config: { ...editingTrader.config!, ai_provider: v }
-                      })}
-                    >
-                      <SelectTrigger className="glass">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="openrouter">OpenRouter</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>AI Provider</Label>
+                      <Select
+                        value={editingTrader.config?.ai_provider || 'openrouter'}
+                        onValueChange={(v) => setEditingTrader({
+                          ...editingTrader,
+                          config: { ...editingTrader.config!, ai_provider: v }
+                        })}
+                      >
+                        <SelectTrigger className="glass">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="openrouter">OpenRouter</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center mt-6">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={editingTrader.config?.use_custom_model ?? false}
+                          onCheckedChange={(v) => setEditingTrader({
+                            ...editingTrader,
+                            config: { ...editingTrader.config!, use_custom_model: !!v }
+                          })}
+                        />
+                        <Label className="cursor-pointer">Use Custom Model</Label>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>AI Model</Label>
-                    <Select
-                      value={editingTrader.config?.ai_model || 'deepseek/deepseek-v3.2'}
-                      onValueChange={(v) => setEditingTrader({
-                        ...editingTrader,
-                        config: { ...editingTrader.config!, ai_model: v }
-                      })}
-                    >
-                      <SelectTrigger className="glass">
-                        <SelectValue placeholder={editingTrader.config?.ai_model || 'Select a model'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {/* Show current model if it's not in the predefined list */}
-                        {editingTrader.config?.ai_model &&
-                          !['google/gemini-2.5-flash', 'openai/gpt-oss-120b', 'x-ai/grok-4.1-fast',
-                            'deepseek/deepseek-v3.2', 'openai/gpt-5-mini', 'openai/gpt-4.1-nano',
-                            'openai/gpt-4o-mini'].includes(editingTrader.config.ai_model) && (
-                            <SelectItem value={editingTrader.config.ai_model}>
-                              {editingTrader.config.ai_model} (current)
-                            </SelectItem>
-                          )}
-                        <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                        <SelectItem value="openai/gpt-oss-120b">GPT-OSS-120B</SelectItem>
-                        <SelectItem value="x-ai/grok-4.1-fast">Grok 4.1 Fast</SelectItem>
-                        <SelectItem value="deepseek/deepseek-v3.2">DeepSeek V3.2</SelectItem>
-                        <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
-                        <SelectItem value="openai/gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
-                        <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+
+                  {editingTrader.config?.use_custom_model ? (
+                    <div className="space-y-2">
+                      <Label>Custom Model ID</Label>
+                      <Input
+                        value={editingTrader.config?.ai_model || ''}
+                        onChange={(e) => setEditingTrader({
+                          ...editingTrader,
+                          config: { ...editingTrader.config!, ai_model: e.target.value }
+                        })}
+                        className="glass"
+                        placeholder="e.g., anthropic/claude-3.5-sonnet, meta-llama/llama-3.1-70b"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the full OpenRouter model ID. Find models at{' '}
+                        <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                          openrouter.ai/models
+                        </a>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>AI Model</Label>
+                      <Select
+                        value={editingTrader.config?.ai_model || 'deepseek/deepseek-chat'}
+                        onValueChange={(v) => setEditingTrader({
+                          ...editingTrader,
+                          config: { ...editingTrader.config!, ai_model: v }
+                        })}
+                      >
+                        <SelectTrigger className="glass">
+                          <SelectValue placeholder="Select a model" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (Free)</SelectItem>
+                          <SelectItem value="google/gemini-2.0-flash-thinking-exp:free">Gemini 2.0 Flash Thinking (Free)</SelectItem>
+                          <SelectItem value="deepseek/deepseek-chat">DeepSeek Chat</SelectItem>
+                          <SelectItem value="deepseek/deepseek-r1">DeepSeek R1</SelectItem>
+                          <SelectItem value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</SelectItem>
+                          <SelectItem value="openai/gpt-4o">GPT-4o</SelectItem>
+                          <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
+                          <SelectItem value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</SelectItem>
+                          <SelectItem value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
               </GlassCard>
 

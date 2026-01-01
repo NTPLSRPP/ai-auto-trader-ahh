@@ -66,6 +66,7 @@ export interface TraderConfig {
   api_key: string;
   secret_key: string;
   testnet: boolean;
+  use_custom_model?: boolean;
 }
 
 export interface Position {
