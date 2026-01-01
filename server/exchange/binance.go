@@ -481,6 +481,139 @@ func (c *BinanceClient) CancelAllOrders(ctx context.Context, symbol string) erro
 	return err
 }
 
+// PlaceStopLoss places a stop-loss order (STOP_MARKET)
+// For LONG positions: side should be "SELL", stopPrice below entry
+// For SHORT positions: side should be "BUY", stopPrice above entry
+func (c *BinanceClient) PlaceStopLoss(ctx context.Context, symbol, side string, quantity, stopPrice float64) (*Order, error) {
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("side", side)
+	params.Set("type", "STOP_MARKET")
+	params.Set("closePosition", "true") // Close entire position when triggered
+
+	// Set stop price with proper precision
+	pricePrecision := getPricePrecision(symbol)
+	params.Set("stopPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
+
+	log.Printf("[Binance] Placing STOP_LOSS: %s %s @ %.2f", symbol, side, stopPrice)
+
+	body, err := c.doRequest(ctx, "POST", "/fapi/v1/order", params, true)
+	if err != nil {
+		log.Printf("[Binance] Stop-loss order failed: %v", err)
+		return nil, err
+	}
+
+	var order Order
+	if err := json.Unmarshal(body, &order); err != nil {
+		return nil, fmt.Errorf("failed to parse order: %w", err)
+	}
+
+	log.Printf("[Binance] Stop-loss placed: ID=%d, Status=%s", order.OrderID, order.Status)
+	return &order, nil
+}
+
+// PlaceTakeProfit places a take-profit order (TAKE_PROFIT_MARKET)
+// For LONG positions: side should be "SELL", stopPrice above entry
+// For SHORT positions: side should be "BUY", stopPrice below entry
+func (c *BinanceClient) PlaceTakeProfit(ctx context.Context, symbol, side string, quantity, stopPrice float64) (*Order, error) {
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("side", side)
+	params.Set("type", "TAKE_PROFIT_MARKET")
+	params.Set("closePosition", "true") // Close entire position when triggered
+
+	// Set stop price with proper precision
+	pricePrecision := getPricePrecision(symbol)
+	params.Set("stopPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
+
+	log.Printf("[Binance] Placing TAKE_PROFIT: %s %s @ %.2f", symbol, side, stopPrice)
+
+	body, err := c.doRequest(ctx, "POST", "/fapi/v1/order", params, true)
+	if err != nil {
+		log.Printf("[Binance] Take-profit order failed: %v", err)
+		return nil, err
+	}
+
+	var order Order
+	if err := json.Unmarshal(body, &order); err != nil {
+		return nil, fmt.Errorf("failed to parse order: %w", err)
+	}
+
+	log.Printf("[Binance] Take-profit placed: ID=%d, Status=%s", order.OrderID, order.Status)
+	return &order, nil
+}
+
+// PlaceBracketOrders places both stop-loss and take-profit orders for a position
+// Returns (slOrder, tpOrder, error)
+func (c *BinanceClient) PlaceBracketOrders(ctx context.Context, symbol string, isLong bool, entryPrice, slPct, tpPct float64) (*Order, *Order, error) {
+	var slPrice, tpPrice float64
+	var closeSide string
+
+	if isLong {
+		closeSide = "SELL"
+		slPrice = entryPrice * (1 - slPct/100) // SL below entry for long
+		tpPrice = entryPrice * (1 + tpPct/100) // TP above entry for long
+	} else {
+		closeSide = "BUY"
+		slPrice = entryPrice * (1 + slPct/100) // SL above entry for short
+		tpPrice = entryPrice * (1 - tpPct/100) // TP below entry for short
+	}
+
+	log.Printf("[Binance] Placing bracket orders for %s: entry=%.2f, SL=%.2f (%.1f%%), TP=%.2f (%.1f%%)",
+		symbol, entryPrice, slPrice, slPct, tpPrice, tpPct)
+
+	// Place stop-loss
+	slOrder, err := c.PlaceStopLoss(ctx, symbol, closeSide, 0, slPrice)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to place stop-loss: %w", err)
+	}
+
+	// Place take-profit
+	tpOrder, err := c.PlaceTakeProfit(ctx, symbol, closeSide, 0, tpPrice)
+	if err != nil {
+		// If TP fails, cancel the SL order to avoid orphaned orders
+		log.Printf("[Binance] Take-profit failed, cancelling stop-loss order %d", slOrder.OrderID)
+		_ = c.CancelOrder(ctx, symbol, slOrder.OrderID)
+		return nil, nil, fmt.Errorf("failed to place take-profit: %w", err)
+	}
+
+	return slOrder, tpOrder, nil
+}
+
+// CancelOrder cancels a specific order by ID
+func (c *BinanceClient) CancelOrder(ctx context.Context, symbol string, orderID int64) error {
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("orderId", strconv.FormatInt(orderID, 10))
+
+	_, err := c.doRequest(ctx, "DELETE", "/fapi/v1/order", params, true)
+	if err != nil {
+		log.Printf("[Binance] Failed to cancel order %d: %v", orderID, err)
+		return err
+	}
+
+	log.Printf("[Binance] Cancelled order %d for %s", orderID, symbol)
+	return nil
+}
+
+// GetOpenOrders returns all open orders for a symbol
+func (c *BinanceClient) GetOpenOrders(ctx context.Context, symbol string) ([]Order, error) {
+	params := url.Values{}
+	params.Set("symbol", symbol)
+
+	body, err := c.doRequest(ctx, "GET", "/fapi/v1/openOrders", params, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var orders []Order
+	if err := json.Unmarshal(body, &orders); err != nil {
+		return nil, fmt.Errorf("failed to parse orders: %w", err)
+	}
+
+	return orders, nil
+}
+
 func parseFloat(v interface{}) float64 {
 	switch val := v.(type) {
 	case string:

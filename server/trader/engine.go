@@ -61,6 +61,19 @@ type Engine struct {
 
 	// Order sync
 	orderSyncStop chan struct{}
+
+	// SL/TP Order Tracking
+	bracketOrders      map[string]*BracketOrderIDs // key: symbol -> SL/TP order IDs
+	bracketOrdersMutex sync.RWMutex
+}
+
+// BracketOrderIDs tracks stop-loss and take-profit order IDs for a position
+type BracketOrderIDs struct {
+	StopLossOrderID   int64
+	TakeProfitOrderID int64
+	EntryPrice        float64
+	StopLossPct       float64
+	TakeProfitPct     float64
 }
 
 type TradeLog struct {
@@ -119,6 +132,9 @@ func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceCl
 		// Initialize position management maps
 		peakPnLCache:          make(map[string]float64),
 		positionFirstSeenTime: make(map[string]int64),
+
+		// Initialize bracket orders tracking
+		bracketOrders: make(map[string]*BracketOrderIDs),
 
 		// Initialize daily tracking
 		lastResetTime:  time.Now(),
@@ -437,9 +453,9 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			return fmt.Errorf("skipped: %w", err)
 		}
 
-		// 2. Validate risk-reward ratio if SL/TP provided
-		if decision.StopLoss > 0 && decision.TakeProfit > 0 {
-			if err := e.validateRiskRewardRatio(decision.Action, decision.StopLoss, decision.TakeProfit, ticker.Price); err != nil {
+		// 2. Validate risk-reward ratio if SL/TP percentages provided
+		if decision.StopLossPct > 0 && decision.TakeProfitPct > 0 {
+			if err := e.validateRiskRewardRatioPct(decision.StopLossPct, decision.TakeProfitPct); err != nil {
 				log.Printf("[%s][%s] %v, skipping trade", e.name, symbol, err)
 				return fmt.Errorf("skipped: %w", err)
 			}
@@ -498,6 +514,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 				return fmt.Errorf("failed to close short: %w", err)
 			}
 			e.clearPositionTracking(symbol, "SHORT")
+			e.cancelBracketOrders(ctx, symbol)
 		}
 		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
@@ -505,6 +522,12 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			return fmt.Errorf("failed to open long: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "LONG")
+
+		// Place bracket orders (SL/TP) on exchange
+		slPct, tpPct := e.getSLTPPercentages(decision)
+		if slPct > 0 && tpPct > 0 {
+			e.placeBracketOrders(ctx, symbol, true, ticker.Price, slPct, tpPct)
+		}
 
 	case "SELL", "open_short":
 		if hasPosition && currentPos.PositionAmt < 0 {
@@ -517,6 +540,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 				return fmt.Errorf("failed to close long: %w", err)
 			}
 			e.clearPositionTracking(symbol, "LONG")
+			e.cancelBracketOrders(ctx, symbol)
 		}
 		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
@@ -524,6 +548,12 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			return fmt.Errorf("failed to open short: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "SHORT")
+
+		// Place bracket orders (SL/TP) on exchange
+		slPct, tpPct := e.getSLTPPercentages(decision)
+		if slPct > 0 && tpPct > 0 {
+			e.placeBracketOrders(ctx, symbol, false, ticker.Price, slPct, tpPct)
+		}
 
 	case "CLOSE", "close_long", "close_short":
 		if !hasPosition {
@@ -540,6 +570,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			return fmt.Errorf("failed to close position: %w", err)
 		}
 		e.clearPositionTracking(symbol, side)
+		e.cancelBracketOrders(ctx, symbol)
 
 	case "HOLD", "hold", "wait":
 		log.Printf("[%s][%s] Holding - no action taken", e.name, symbol)
@@ -997,9 +1028,9 @@ func (e *Engine) enforceMaxPositions() error {
 	return nil
 }
 
-// validateRiskRewardRatio validates TP/SL ratio meets minimum requirement
-// Returns nil if SL/TP values are nonsensical (skips validation to allow trade)
-func (e *Engine) validateRiskRewardRatio(action string, stopLoss, takeProfit, currentPrice float64) error {
+// validateRiskRewardRatioPct validates TP/SL percentage ratio meets minimum requirement
+// Uses simple percentage comparison - TP% should be at least minRatio * SL%
+func (e *Engine) validateRiskRewardRatioPct(slPct, tpPct float64) error {
 	if e.strategy == nil {
 		return nil
 	}
@@ -1010,36 +1041,24 @@ func (e *Engine) validateRiskRewardRatio(action string, stopLoss, takeProfit, cu
 		return nil
 	}
 
-	// Only validate for open actions
-	if action != "BUY" && action != "SELL" && action != "open_long" && action != "open_short" {
+	// Validate percentages are sensible
+	if slPct <= 0 || slPct > 20 {
+		log.Printf("[RiskReward] Skipping validation - invalid SL%%: %.2f", slPct)
+		return nil
+	}
+	if tpPct <= 0 || tpPct > 50 {
+		log.Printf("[RiskReward] Skipping validation - invalid TP%%: %.2f", tpPct)
 		return nil
 	}
 
-	// Calculate risk and reward based on action type
-	var risk, reward float64
-	isLong := action == "BUY" || action == "open_long"
-
-	if isLong {
-		risk = currentPrice - stopLoss
-		reward = takeProfit - currentPrice
-	} else {
-		risk = stopLoss - currentPrice
-		reward = currentPrice - takeProfit
-	}
-
-	// If SL/TP values don't make sense for the direction, skip validation
-	// (AI returned garbage values - don't block the trade)
-	if risk <= 0 || reward <= 0 {
-		log.Printf("[RiskReward] Skipping validation - nonsensical SL/TP for %s: SL=%.2f, TP=%.2f, price=%.2f",
-			action, stopLoss, takeProfit, currentPrice)
-		return nil
-	}
-
-	ratio := reward / risk
+	// Check ratio: tpPct / slPct should be >= minRatio
+	ratio := tpPct / slPct
 	if ratio < minRatio {
-		return fmt.Errorf("risk-reward ratio %.2f below minimum %.2f", ratio, minRatio)
+		return fmt.Errorf("risk-reward ratio %.2f:1 below minimum %.2f:1 (SL=%.1f%%, TP=%.1f%%)",
+			ratio, minRatio, slPct, tpPct)
 	}
 
+	log.Printf("[RiskReward] Valid ratio %.2f:1 (SL=%.1f%%, TP=%.1f%%)", ratio, slPct, tpPct)
 	return nil
 }
 
@@ -1131,6 +1150,101 @@ func (e *Engine) clearPositionTracking(symbol, side string) {
 	e.mu.Unlock()
 
 	e.ClearPeakPnL(symbol, side)
+}
+
+// =============================================================================
+// Bracket Orders (SL/TP) Management
+// =============================================================================
+
+// getSLTPPercentages extracts stop-loss and take-profit percentages from decision
+// Returns default values if not provided by AI
+func (e *Engine) getSLTPPercentages(decision *ai.TradingDecision) (slPct, tpPct float64) {
+	// Use new percentage fields
+	slPct = decision.StopLossPct
+	tpPct = decision.TakeProfitPct
+
+	// Validate and set defaults if needed
+	if slPct <= 0 || slPct > 10 {
+		slPct = 2.0 // Default 2% stop loss
+	}
+	if tpPct <= 0 || tpPct > 30 {
+		tpPct = 6.0 // Default 6% take profit (3:1 ratio)
+	}
+
+	// Ensure minimum 2:1 ratio
+	if tpPct < slPct*2 {
+		tpPct = slPct * 3 // Force 3:1 ratio
+		log.Printf("[SL/TP] Adjusted TP to %.1f%% for 3:1 ratio (SL=%.1f%%)", tpPct, slPct)
+	}
+
+	return slPct, tpPct
+}
+
+// placeBracketOrders places SL/TP orders on Binance and tracks them
+func (e *Engine) placeBracketOrders(ctx context.Context, symbol string, isLong bool, entryPrice, slPct, tpPct float64) {
+	log.Printf("[%s][%s] Placing bracket orders: SL=%.1f%%, TP=%.1f%%, entry=$%.2f",
+		e.name, symbol, slPct, tpPct, entryPrice)
+
+	slOrder, tpOrder, err := e.binance.PlaceBracketOrders(ctx, symbol, isLong, entryPrice, slPct, tpPct)
+	if err != nil {
+		log.Printf("[%s][%s] Failed to place bracket orders: %v", e.name, symbol, err)
+		return
+	}
+
+	// Store order IDs for tracking
+	e.bracketOrdersMutex.Lock()
+	e.bracketOrders[symbol] = &BracketOrderIDs{
+		StopLossOrderID:   slOrder.OrderID,
+		TakeProfitOrderID: tpOrder.OrderID,
+		EntryPrice:        entryPrice,
+		StopLossPct:       slPct,
+		TakeProfitPct:     tpPct,
+	}
+	e.bracketOrdersMutex.Unlock()
+
+	log.Printf("[%s][%s] Bracket orders placed: SL_ID=%d, TP_ID=%d",
+		e.name, symbol, slOrder.OrderID, tpOrder.OrderID)
+}
+
+// cancelBracketOrders cancels any existing SL/TP orders for a symbol
+func (e *Engine) cancelBracketOrders(ctx context.Context, symbol string) {
+	e.bracketOrdersMutex.Lock()
+	bracket, exists := e.bracketOrders[symbol]
+	if exists {
+		delete(e.bracketOrders, symbol)
+	}
+	e.bracketOrdersMutex.Unlock()
+
+	if !exists {
+		return
+	}
+
+	log.Printf("[%s][%s] Cancelling bracket orders: SL_ID=%d, TP_ID=%d",
+		e.name, symbol, bracket.StopLossOrderID, bracket.TakeProfitOrderID)
+
+	// Cancel both orders (ignore errors - they may have been filled)
+	if bracket.StopLossOrderID > 0 {
+		if err := e.binance.CancelOrder(ctx, symbol, bracket.StopLossOrderID); err != nil {
+			log.Printf("[%s][%s] SL cancel (may be filled): %v", e.name, symbol, err)
+		}
+	}
+	if bracket.TakeProfitOrderID > 0 {
+		if err := e.binance.CancelOrder(ctx, symbol, bracket.TakeProfitOrderID); err != nil {
+			log.Printf("[%s][%s] TP cancel (may be filled): %v", e.name, symbol, err)
+		}
+	}
+}
+
+// GetBracketOrders returns the current bracket orders for all symbols
+func (e *Engine) GetBracketOrders() map[string]*BracketOrderIDs {
+	e.bracketOrdersMutex.RLock()
+	defer e.bracketOrdersMutex.RUnlock()
+
+	result := make(map[string]*BracketOrderIDs)
+	for k, v := range e.bracketOrders {
+		result[k] = v
+	}
+	return result
 }
 
 // =============================================================================

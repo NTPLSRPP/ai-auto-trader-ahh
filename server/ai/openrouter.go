@@ -52,12 +52,15 @@ type ChatResponse struct {
 }
 
 type TradingDecision struct {
-	Action     string  `json:"action"`      // BUY, SELL, HOLD, CLOSE
-	Symbol     string  `json:"symbol"`      // Trading pair
-	Confidence float64 `json:"confidence"`  // 0-100
-	Reasoning  string  `json:"reasoning"`   // AI's reasoning
-	StopLoss   float64 `json:"stop_loss"`   // Stop loss PRICE (absolute, not %)
-	TakeProfit float64 `json:"take_profit"` // Take profit PRICE (absolute, not %)
+	Action        string  `json:"action"`          // BUY, SELL, HOLD, CLOSE
+	Symbol        string  `json:"symbol"`          // Trading pair
+	Confidence    float64 `json:"confidence"`      // 0-100
+	Reasoning     string  `json:"reasoning"`       // AI's reasoning
+	StopLossPct   float64 `json:"stop_loss_pct"`   // Stop loss as percentage (e.g., 2.0 = 2%)
+	TakeProfitPct float64 `json:"take_profit_pct"` // Take profit as percentage (e.g., 6.0 = 6%)
+	// Legacy fields for backward compatibility
+	StopLoss   float64 `json:"stop_loss,omitempty"`   // Deprecated: use StopLossPct
+	TakeProfit float64 `json:"take_profit,omitempty"` // Deprecated: use TakeProfitPct
 }
 
 func NewClient(apiKey, model string) *Client {
@@ -138,17 +141,16 @@ Response format:
   "symbol": "BTCUSDT",
   "confidence": 0-100,
   "reasoning": "Brief explanation of your decision",
-  "stop_loss": 93500.00,
-  "take_profit": 96000.00
+  "stop_loss_pct": 2.0,
+  "take_profit_pct": 6.0
 }
 
-CRITICAL RULES FOR stop_loss AND take_profit:
-- These MUST be ABSOLUTE PRICE values, NOT percentages
-- For BUY (long): stop_loss < current_price < take_profit
-- For SELL (short): take_profit < current_price < stop_loss
-- Use the current price from market data to calculate reasonable levels
-- Aim for at least 3:1 reward-to-risk ratio
-- Example for BUY at $94000: stop_loss=93000, take_profit=97000
+CRITICAL RULES FOR stop_loss_pct AND take_profit_pct:
+- These are PERCENTAGES from entry price (e.g., 2.0 means 2%)
+- stop_loss_pct: How far price can move against you before stopping out (1-5%)
+- take_profit_pct: Target profit percentage (3-15%)
+- MUST maintain at least 3:1 reward-to-risk ratio (take_profit_pct >= 3 * stop_loss_pct)
+- Example: stop_loss_pct=2.0, take_profit_pct=6.0 gives 3:1 ratio
 
 Trading Rules:
 - BUY: Open a long position (bullish)
@@ -156,7 +158,8 @@ Trading Rules:
 - HOLD: Do nothing, wait for better opportunity
 - CLOSE: Close existing position
 - Only trade when confidence >= 70
-- Consider trend, volume, RSI, MACD, EMA crossovers, and support/resistance levels`
+- Consider trend, volume, RSI, MACD, EMA crossovers, and support/resistance levels
+- Higher volatility (ATR) = wider stops needed`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
