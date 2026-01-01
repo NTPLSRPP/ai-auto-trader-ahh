@@ -434,14 +434,14 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		// 1. Check max positions
 		if err := e.enforceMaxPositions(); err != nil {
 			log.Printf("[%s][%s] %v, skipping new position", e.name, symbol, err)
-			return nil
+			return fmt.Errorf("skipped: %w", err)
 		}
 
 		// 2. Validate risk-reward ratio if SL/TP provided
 		if decision.StopLoss > 0 && decision.TakeProfit > 0 {
 			if err := e.validateRiskRewardRatio(decision.Action, decision.StopLoss, decision.TakeProfit, ticker.Price); err != nil {
 				log.Printf("[%s][%s] %v, skipping trade", e.name, symbol, err)
-				return nil
+				return fmt.Errorf("skipped: %w", err)
 			}
 		}
 	}
@@ -453,19 +453,31 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	}
 
 	leverage := e.getLeverageLimit(symbol)
+
+	// Log balance info for debugging
+	log.Printf("[%s][%s] Balance: equity=$%.2f, available=$%.2f, leverage=%dx",
+		e.name, symbol, equity, account.AvailableBalance, leverage)
+
 	positionSizeUSD := account.AvailableBalance * 0.1 * float64(leverage) // Start with 10% of available
+	log.Printf("[%s][%s] Initial position size: $%.2f (10%% of $%.2f * %dx)",
+		e.name, symbol, positionSizeUSD, account.AvailableBalance, leverage)
 
 	if isOpenAction && !hasPosition {
 		// 3. Enforce position value ratio (cap by equity * ratio)
-		positionSizeUSD, _ = e.enforcePositionValueRatio(positionSizeUSD, equity, symbol)
+		var wasCapped bool
+		positionSizeUSD, wasCapped = e.enforcePositionValueRatio(positionSizeUSD, equity, symbol)
+		if wasCapped {
+			log.Printf("[%s][%s] Position capped to $%.2f by value ratio", e.name, symbol, positionSizeUSD)
+		}
 
 		// 4. Apply margin buffer (use 98% of calculated size)
 		positionSizeUSD = e.applyMarginBuffer(positionSizeUSD)
+		log.Printf("[%s][%s] After margin buffer: $%.2f", e.name, symbol, positionSizeUSD)
 
 		// 5. Enforce minimum position size
 		if err := e.enforceMinPositionSize(positionSizeUSD, symbol); err != nil {
 			log.Printf("[%s][%s] %v, skipping trade", e.name, symbol, err)
-			return nil
+			return fmt.Errorf("skipped: %w", err)
 		}
 	}
 
@@ -475,7 +487,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	case "BUY", "open_long":
 		if hasPosition && currentPos.PositionAmt > 0 {
 			log.Printf("[%s][%s] Already in LONG position, skipping BUY", e.name, symbol)
-			return nil
+			return fmt.Errorf("skipped: already in LONG position")
 		}
 		if hasPosition && currentPos.PositionAmt < 0 {
 			log.Printf("[%s][%s] Closing SHORT position before opening LONG", e.name, symbol)
@@ -494,7 +506,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	case "SELL", "open_short":
 		if hasPosition && currentPos.PositionAmt < 0 {
 			log.Printf("[%s][%s] Already in SHORT position, skipping SELL", e.name, symbol)
-			return nil
+			return fmt.Errorf("skipped: already in SHORT position")
 		}
 		if hasPosition && currentPos.PositionAmt > 0 {
 			log.Printf("[%s][%s] Closing LONG position before opening SHORT", e.name, symbol)
@@ -513,7 +525,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	case "CLOSE", "close_long", "close_short":
 		if !hasPosition {
 			log.Printf("[%s][%s] No position to close", e.name, symbol)
-			return nil
+			return fmt.Errorf("skipped: no position to close")
 		}
 		side := "LONG"
 		if currentPos.PositionAmt < 0 {
