@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   XCircle,
   Brain,
+  Timer,
 } from 'lucide-react';
 import {
   listDebates,
@@ -103,6 +104,35 @@ export default function Debate() {
   // Selected model and personality for adding participants
   const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
   const [selectedPersonality, setSelectedPersonality] = useState(PERSONALITIES[0].id);
+  const [customModelId, setCustomModelId] = useState('');
+
+  // Countdown timer state
+  const [countdown, setCountdown] = useState<string>('');
+
+  // Format countdown from next_cycle_at
+  const formatCountdown = (nextCycleAt: string): string => {
+    const diff = new Date(nextCycleAt).getTime() - Date.now();
+    if (diff <= 0) return 'Starting...';
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Update countdown every second
+  useEffect(() => {
+    if (!sessionDetails?.auto_cycle || !sessionDetails?.next_cycle_at) {
+      setCountdown('');
+      return;
+    }
+
+    const updateCountdown = () => {
+      setCountdown(formatCountdown(sessionDetails.next_cycle_at!));
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [sessionDetails?.next_cycle_at, sessionDetails?.auto_cycle]);
 
   useEffect(() => {
     loadData();
@@ -140,7 +170,18 @@ export default function Debate() {
   };
 
   const handleAddParticipant = (modelId: string, personality: string) => {
-    const model = AI_MODELS.find((m) => m.id === modelId);
+    let model = AI_MODELS.find((m) => m.id === modelId);
+
+    // Handle custom model
+    if (modelId === 'custom') {
+      if (!customModelId.trim()) return;
+      model = {
+        id: customModelId.trim(),
+        name: customModelId.trim(),
+        provider: 'openrouter',
+      };
+    }
+
     if (!model) return;
 
     setFormData({
@@ -404,8 +445,17 @@ export default function Debate() {
                             {model.name}
                           </SelectItem>
                         ))}
+                        <SelectItem value="custom">✨ Custom Model</SelectItem>
                       </SelectContent>
                     </Select>
+                    {selectedModel === 'custom' && (
+                      <Input
+                        className="glass flex-1"
+                        placeholder="e.g. openai/gpt-4-turbo"
+                        value={customModelId}
+                        onChange={(e) => setCustomModelId(e.target.value)}
+                      />
+                    )}
                     <Select value={selectedPersonality} onValueChange={setSelectedPersonality}>
                       <SelectTrigger className="glass flex-1">
                         <SelectValue placeholder="Personality" />
@@ -636,18 +686,26 @@ export default function Debate() {
                         Round {sessionDetails.current_round} of {sessionDetails.max_rounds}
                       </p>
                     </div>
-                    {sessionDetails.status === 'running' && (
-                      <GlowBadge variant="info" pulse glow>
-                        <Brain className="w-3 h-3 mr-1" />
-                        AI Thinking...
-                      </GlowBadge>
-                    )}
-                    {sessionDetails.status === 'completed' && (
-                      <GlowBadge variant="success" glow>
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Completed
-                      </GlowBadge>
-                    )}
+                    <div className="flex gap-2">
+                      {sessionDetails.status === 'running' && (
+                        <GlowBadge variant="info" pulse glow>
+                          <Brain className="w-3 h-3 mr-1" />
+                          AI Thinking...
+                        </GlowBadge>
+                      )}
+                      {sessionDetails.status === 'completed' && (
+                        <GlowBadge variant="success" glow>
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Completed
+                        </GlowBadge>
+                      )}
+                      {sessionDetails.auto_cycle && countdown && (
+                        <GlowBadge variant="warning" pulse>
+                          <Timer className="w-3 h-3 mr-1" />
+                          Next: {countdown}
+                        </GlowBadge>
+                      )}
+                    </div>
                   </div>
                   {/* Progress bar */}
                   {sessionDetails.max_rounds > 0 && (

@@ -938,6 +938,7 @@ func getPositionKey(symbol, side string) string {
 
 // enforcePositionValueRatio caps position size based on equity ratio
 // Returns the capped position size and whether it was modified
+// NOTE: Only applies if the strategy explicitly sets these new ratio fields
 func (e *Engine) enforcePositionValueRatio(positionSizeUSD, equity float64, symbol string) (float64, bool) {
 	if e.strategy == nil {
 		return positionSizeUSD, false
@@ -948,13 +949,15 @@ func (e *Engine) enforcePositionValueRatio(positionSizeUSD, equity float64, symb
 
 	if isBTCETH(symbol) {
 		maxRatio = rc.BTCETHMaxPositionValueRatio
+		// If not set (0), disable this check for backward compatibility
 		if maxRatio <= 0 {
-			maxRatio = 5.0 // Default 5x equity for BTC/ETH
+			return positionSizeUSD, false
 		}
 	} else {
 		maxRatio = rc.AltcoinMaxPositionValueRatio
+		// If not set (0), disable this check for backward compatibility
 		if maxRatio <= 0 {
-			maxRatio = 1.0 // Default 1x equity for altcoins
+			return positionSizeUSD, false
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -46,12 +47,14 @@ func NewServer(port string, em *trader.EngineManager, cfg *config.Config) *Serve
 	debateEng.RegisterClient("anthropic", aiClient) // OpenRouter supports these models
 	debateEng.RegisterClient("deepseek", aiClient)
 
-	return &Server{
+	equityStore := store.NewEquityStore()
+
+	srv := &Server{
 		port:            port,
 		strategyStore:   store.NewStrategyStore(),
 		traderStore:     store.NewTraderStore(),
 		decisionStore:   store.NewDecisionStore(),
-		equityStore:     store.NewEquityStore(),
+		equityStore:     equityStore,
 		engineManager:   em,
 		debateEngine:    debateEng,
 		backtestManager: backtest.NewManager(aiClient, binanceClient),
@@ -59,6 +62,12 @@ func NewServer(port string, em *trader.EngineManager, cfg *config.Config) *Serve
 		binanceClient:   binanceClient,
 		accessPasskey:   cfg.AccessPasskey,
 	}
+
+	// Wire up debate engine with market context provider and trade executor
+	debateEng.SetMarketContextProvider(srv.buildDebateMarketContextForCycle)
+	debateEng.SetTradeExecutor(srv.executeDebateDecisions)
+
+	return srv
 }
 
 func (s *Server) Start() error {
@@ -860,4 +869,219 @@ func (s *Server) buildDebateMarketContext(symbols []string) *debate.MarketContex
 		Positions:   []decision.PositionInfo{}, // No existing positions
 		MarketData:  marketData,
 	}
+}
+
+// buildDebateMarketContextForCycle is used by auto-cycle to get fresh market data
+func (s *Server) buildDebateMarketContextForCycle(symbols []string) (*debate.MarketContext, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	marketData := make(map[string]*decision.MarketData)
+
+	// Fetch market data for each symbol
+	for _, symbol := range symbols {
+		ticker, err := s.binanceClient.GetTicker(ctx, symbol)
+		if err != nil {
+			log.Printf("[Debate] Failed to get ticker for %s: %v", symbol, err)
+			continue
+		}
+
+		klines, err := s.binanceClient.GetKlines(ctx, symbol, "5m", 288)
+		if err != nil {
+			log.Printf("[Debate] Failed to get klines for %s: %v", symbol, err)
+		}
+
+		var highPrice, lowPrice, volume24h, openPrice float64
+		if len(klines) > 0 {
+			openPrice = klines[0].Open
+			highPrice = klines[0].High
+			lowPrice = klines[0].Low
+			for _, k := range klines {
+				if k.High > highPrice {
+					highPrice = k.High
+				}
+				if k.Low < lowPrice {
+					lowPrice = k.Low
+				}
+				volume24h += k.Volume
+			}
+		}
+
+		change24h := 0.0
+		if openPrice > 0 {
+			change24h = ((ticker.Price - openPrice) / openPrice) * 100
+		}
+
+		var decisionKlines []decision.Kline
+		for _, k := range klines {
+			decisionKlines = append(decisionKlines, decision.Kline{
+				OpenTime:  k.OpenTime,
+				Open:      k.Open,
+				High:      k.High,
+				Low:       k.Low,
+				Close:     k.Close,
+				Volume:    k.Volume,
+				CloseTime: k.CloseTime,
+			})
+		}
+
+		md := &decision.MarketData{
+			Symbol:       symbol,
+			Price:        ticker.Price,
+			Change24h:    change24h,
+			Volume24h:    volume24h,
+			HighPrice24h: highPrice,
+			LowPrice24h:  lowPrice,
+			Timestamp:    time.Now(),
+			Klines:       decisionKlines,
+		}
+		marketData[symbol] = md
+	}
+
+	// Get real account info from Binance
+	account, err := s.binanceClient.GetAccountInfo(ctx)
+	if err != nil {
+		log.Printf("[Debate] Failed to get account info, using simulated: %v", err)
+		account = &exchange.AccountInfo{
+			TotalWalletBalance:    10000.0,
+			TotalMarginBalance:    10000.0,
+			AvailableBalance:      10000.0,
+			TotalUnrealizedProfit: 0,
+		}
+	}
+
+	// Get real positions
+	positions, err := s.binanceClient.GetPositions(ctx)
+	if err != nil {
+		log.Printf("[Debate] Failed to get positions: %v", err)
+		positions = []exchange.Position{}
+	}
+
+	// Convert to decision types
+	decisionAccount := decision.AccountInfo{
+		TotalEquity:      account.TotalMarginBalance,
+		AvailableBalance: account.AvailableBalance,
+		UnrealizedPnL:    account.TotalUnrealizedProfit,
+		TotalPnL:         account.TotalMarginBalance - account.TotalWalletBalance,
+		MarginUsed:       account.TotalMarginBalance - account.AvailableBalance,
+	}
+	if account.TotalMarginBalance > 0 {
+		decisionAccount.MarginUsedPct = (decisionAccount.MarginUsed / account.TotalMarginBalance) * 100
+	}
+
+	var decisionPositions []decision.PositionInfo
+	for _, p := range positions {
+		if p.PositionAmt != 0 {
+			decisionPositions = append(decisionPositions, decision.PositionInfo{
+				Symbol:        p.Symbol,
+				Side:          p.PositionSide,
+				Quantity:      p.PositionAmt,
+				EntryPrice:    p.EntryPrice,
+				MarkPrice:     p.MarkPrice,
+				UnrealizedPnL: p.UnrealizedProfit,
+				Leverage:      p.Leverage,
+			})
+		}
+	}
+
+	// Save equity snapshot for the debate trader
+	s.equityStore.Save(&store.EquitySnapshot{
+		TraderID:      "debate_auto",
+		Timestamp:     time.Now(),
+		TotalEquity:   account.TotalMarginBalance,
+		Balance:       account.TotalWalletBalance,
+		UnrealizedPnL: account.TotalUnrealizedProfit,
+		PositionCount: len(decisionPositions),
+	})
+
+	return &debate.MarketContext{
+		CurrentTime: time.Now().Format(time.RFC3339),
+		Account:     decisionAccount,
+		Positions:   decisionPositions,
+		MarketData:  marketData,
+	}, nil
+}
+
+// executeDebateDecisions executes the consensus decisions from a debate
+func (s *Server) executeDebateDecisions(decisions []*debate.Decision) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	for _, d := range decisions {
+		if d.Action == "wait" || d.Action == "hold" {
+			log.Printf("[Debate] Skipping %s for %s", d.Action, d.Symbol)
+			continue
+		}
+
+		if d.Confidence < 60 {
+			log.Printf("[Debate] Skipping %s - low confidence: %d%%", d.Symbol, d.Confidence)
+			continue
+		}
+
+		log.Printf("[Debate] Executing %s on %s (confidence: %d%%)", d.Action, d.Symbol, d.Confidence)
+
+		// Get current price
+		ticker, err := s.binanceClient.GetTicker(ctx, d.Symbol)
+		if err != nil {
+			log.Printf("[Debate] Failed to get price for %s: %v", d.Symbol, err)
+			d.Error = err.Error()
+			continue
+		}
+
+		// Calculate position size
+		positionSizeUSD := d.PositionSizeUSD
+		if positionSizeUSD <= 0 {
+			// Use position percentage of account
+			account, err := s.binanceClient.GetAccountInfo(ctx)
+			if err == nil && d.PositionPct > 0 {
+				positionSizeUSD = account.AvailableBalance * d.PositionPct
+			} else {
+				positionSizeUSD = 100.0 // Default $100
+			}
+		}
+
+		quantity := positionSizeUSD / ticker.Price
+
+		// Execute the trade based on action
+		var side string
+		switch d.Action {
+		case "open_long", "BUY":
+			side = "BUY"
+		case "open_short", "SELL":
+			side = "SELL"
+		case "close_long":
+			side = "SELL"
+		case "close_short":
+			side = "BUY"
+		default:
+			log.Printf("[Debate] Unknown action: %s", d.Action)
+			continue
+		}
+
+		order, err := s.binanceClient.PlaceOrder(ctx, d.Symbol, side, "MARKET", quantity, 0)
+		if err != nil {
+			log.Printf("[Debate] Failed to execute %s on %s: %v", d.Action, d.Symbol, err)
+			d.Error = err.Error()
+			continue
+		}
+
+		d.Executed = true
+		d.ExecutedAt = time.Now()
+		d.OrderID = fmt.Sprintf("%d", order.OrderID)
+		log.Printf("[Debate] Executed order %d: %s %s %.4f @ %.2f", order.OrderID, side, d.Symbol, quantity, ticker.Price)
+	}
+
+	// Save equity snapshot after execution
+	account, err := s.binanceClient.GetAccountInfo(ctx)
+	if err == nil {
+		s.equityStore.Save(&store.EquitySnapshot{
+			TraderID:      "debate_auto",
+			Timestamp:     time.Now(),
+			TotalEquity:   account.TotalMarginBalance,
+			Balance:       account.TotalWalletBalance,
+			UnrealizedPnL: account.TotalUnrealizedProfit,
+		})
+	}
+
+	return nil
 }

@@ -162,6 +162,9 @@ export default function Equity() {
               <SelectValue placeholder="Select trader" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="debate_auto">
+                🔄 Debate Auto-Cycle
+              </SelectItem>
               {traders.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
                   {t.name}

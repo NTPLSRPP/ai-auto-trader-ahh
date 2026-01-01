@@ -27,6 +27,18 @@ type BinanceClient struct {
 	baseURL          string
 	httpClient       *http.Client
 	serverTimeOffset int64 // Offset between local time and Binance server time (in ms)
+
+	// Symbol precision cache (fetched from exchange)
+	symbolInfo map[string]*SymbolInfo
+}
+
+// SymbolInfo holds precision info for a trading symbol
+type SymbolInfo struct {
+	Symbol            string
+	QuantityPrecision int
+	PricePrecision    int
+	MinQty            float64
+	StepSize          float64
 }
 
 type AccountInfo struct {
@@ -91,12 +103,71 @@ func NewBinanceClient(apiKey, secretKey string, testnet bool) *BinanceClient {
 			Timeout: 30 * time.Second,
 		},
 		serverTimeOffset: 0,
+		symbolInfo:       make(map[string]*SymbolInfo),
 	}
 
 	// Sync time with Binance server
 	client.syncServerTime()
 
+	// Fetch exchange info for precision data
+	client.fetchExchangeInfo()
+
 	return client
+}
+
+// fetchExchangeInfo fetches symbol precision info from Binance
+func (c *BinanceClient) fetchExchangeInfo() {
+	resp, err := c.httpClient.Get(c.baseURL + "/fapi/v1/exchangeInfo")
+	if err != nil {
+		log.Printf("[Binance] Failed to fetch exchange info: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[Binance] Failed to read exchange info: %v", err)
+		return
+	}
+
+	var result struct {
+		Symbols []struct {
+			Symbol            string `json:"symbol"`
+			QuantityPrecision int    `json:"quantityPrecision"`
+			PricePrecision    int    `json:"pricePrecision"`
+			Filters           []struct {
+				FilterType string `json:"filterType"`
+				MinQty     string `json:"minQty"`
+				StepSize   string `json:"stepSize"`
+			} `json:"filters"`
+		} `json:"symbols"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Printf("[Binance] Failed to parse exchange info: %v", err)
+		return
+	}
+
+	for _, s := range result.Symbols {
+		info := &SymbolInfo{
+			Symbol:            s.Symbol,
+			QuantityPrecision: s.QuantityPrecision,
+			PricePrecision:    s.PricePrecision,
+		}
+
+		// Extract LOT_SIZE filter for min qty and step size
+		for _, f := range s.Filters {
+			if f.FilterType == "LOT_SIZE" {
+				info.MinQty = parseFloat(f.MinQty)
+				info.StepSize = parseFloat(f.StepSize)
+				break
+			}
+		}
+
+		c.symbolInfo[s.Symbol] = info
+	}
+
+	log.Printf("[Binance] Fetched exchange info for %d symbols", len(c.symbolInfo))
 }
 
 // syncServerTime fetches server time and calculates offset
@@ -346,9 +417,13 @@ func (c *BinanceClient) SetLeverage(ctx context.Context, symbol string, leverage
 }
 
 // getQuantityPrecision returns the quantity precision for a symbol
-func getQuantityPrecision(symbol string) int {
-	// Binance Futures precision requirements
-	// Check https://www.binance.com/fapi/v1/exchangeInfo for actual values
+func (c *BinanceClient) getQuantityPrecision(symbol string) int {
+	// Check cached exchange info first
+	if info, ok := c.symbolInfo[symbol]; ok {
+		return info.QuantityPrecision
+	}
+
+	// Fallback to hardcoded values
 	precisions := map[string]int{
 		"BTCUSDT":   3,
 		"ETHUSDT":   3,
@@ -365,7 +440,7 @@ func getQuantityPrecision(symbol string) int {
 		"ATOMUSDT":  2,
 		"UNIUSDT":   1,
 		"XLMUSDT":   0,
-		"THUSDT":    0, // Threshold Network
+		"THUSDT":    0,
 		"ARUSDT":    1,
 		"FETUSDT":   0,
 		"APTUSDT":   1,
@@ -383,7 +458,13 @@ func getQuantityPrecision(symbol string) int {
 }
 
 // getPricePrecision returns the price precision for a symbol
-func getPricePrecision(symbol string) int {
+func (c *BinanceClient) getPricePrecision(symbol string) int {
+	// Check cached exchange info first
+	if info, ok := c.symbolInfo[symbol]; ok {
+		return info.PricePrecision
+	}
+
+	// Fallback to hardcoded values
 	precisions := map[string]int{
 		"BTCUSDT":   1,
 		"ETHUSDT":   2,
@@ -400,7 +481,7 @@ func getPricePrecision(symbol string) int {
 		"ATOMUSDT":  3,
 		"UNIUSDT":   3,
 		"XLMUSDT":   5,
-		"THUSDT":    5, // Threshold Network
+		"THUSDT":    5,
 		"ARUSDT":    3,
 		"FETUSDT":   4,
 		"APTUSDT":   3,
@@ -417,6 +498,23 @@ func getPricePrecision(symbol string) int {
 	return 4 // default to 4 decimal places
 }
 
+// roundToStepSize rounds a quantity to the symbol's step size
+func (c *BinanceClient) roundToStepSize(symbol string, quantity float64) float64 {
+	if info, ok := c.symbolInfo[symbol]; ok && info.StepSize > 0 {
+		// Round down to nearest step size
+		steps := int(quantity / info.StepSize)
+		return float64(steps) * info.StepSize
+	}
+
+	// Fallback to precision-based rounding
+	precision := c.getQuantityPrecision(symbol)
+	multiplier := 1.0
+	for i := 0; i < precision; i++ {
+		multiplier *= 10
+	}
+	return float64(int(quantity*multiplier)) / multiplier
+}
+
 // PlaceOrder places a new order
 func (c *BinanceClient) PlaceOrder(ctx context.Context, symbol, side, orderType string, quantity float64, price float64) (*Order, error) {
 	params := url.Values{}
@@ -424,13 +522,16 @@ func (c *BinanceClient) PlaceOrder(ctx context.Context, symbol, side, orderType 
 	params.Set("side", side)      // BUY or SELL
 	params.Set("type", orderType) // MARKET or LIMIT
 
+	// Round quantity to step size for proper precision
+	quantity = c.roundToStepSize(symbol, quantity)
+
 	// Use proper precision for the symbol
-	qtyPrecision := getQuantityPrecision(symbol)
+	qtyPrecision := c.getQuantityPrecision(symbol)
 	qtyStr := strconv.FormatFloat(quantity, 'f', qtyPrecision, 64)
 	params.Set("quantity", qtyStr)
 
 	if orderType == "LIMIT" {
-		pricePrecision := getPricePrecision(symbol)
+		pricePrecision := c.getPricePrecision(symbol)
 		params.Set("price", strconv.FormatFloat(price, 'f', pricePrecision, 64))
 		params.Set("timeInForce", "GTC")
 	}
@@ -461,13 +562,8 @@ func (c *BinanceClient) ClosePosition(ctx context.Context, symbol string, positi
 		quantity = -positionAmt
 	}
 
-	// Round quantity to proper precision
-	qtyPrecision := getQuantityPrecision(symbol)
-	multiplier := 1.0
-	for i := 0; i < qtyPrecision; i++ {
-		multiplier *= 10
-	}
-	quantity = float64(int(quantity*multiplier+0.5)) / multiplier
+	// Round quantity to step size
+	quantity = c.roundToStepSize(symbol, quantity)
 
 	return c.PlaceOrder(ctx, symbol, side, "MARKET", quantity, 0)
 }
@@ -492,7 +588,7 @@ func (c *BinanceClient) PlaceStopLoss(ctx context.Context, symbol, side string, 
 	params.Set("closePosition", "true") // Close entire position when triggered
 
 	// Set stop price with proper precision
-	pricePrecision := getPricePrecision(symbol)
+	pricePrecision := c.getPricePrecision(symbol)
 	params.Set("stopPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
 
 	log.Printf("[Binance] Placing STOP_LOSS: %s %s @ %.2f", symbol, side, stopPrice)
@@ -523,7 +619,7 @@ func (c *BinanceClient) PlaceTakeProfit(ctx context.Context, symbol, side string
 	params.Set("closePosition", "true") // Close entire position when triggered
 
 	// Set stop price with proper precision
-	pricePrecision := getPricePrecision(symbol)
+	pricePrecision := c.getPricePrecision(symbol)
 	params.Set("stopPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
 
 	log.Printf("[Binance] Placing TAKE_PROFIT: %s %s @ %.2f", symbol, side, stopPrice)
