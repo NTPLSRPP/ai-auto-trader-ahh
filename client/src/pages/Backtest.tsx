@@ -318,12 +318,13 @@ export default function Backtest() {
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="deepseek/deepseek-v3.2">DeepSeek V3.2</SelectItem>
                   <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                  <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
-                  <SelectItem value="openai/gpt-oss-120b">GPT OSS 120B</SelectItem>
+                  <SelectItem value="openai/gpt-oss-120b">GPT-OSS-120B</SelectItem>
                   <SelectItem value="x-ai/grok-4.1-fast">Grok 4.1 Fast</SelectItem>
-                  <SelectItem value="xiaomi/mimo-v2-flash">MiMo V2 Flash</SelectItem>
+                  <SelectItem value="deepseek/deepseek-v3.2">DeepSeek V3.2</SelectItem>
+                  <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
+                  <SelectItem value="openai/gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
+                  <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
                 </SelectContent>
               </Select>
             </div>

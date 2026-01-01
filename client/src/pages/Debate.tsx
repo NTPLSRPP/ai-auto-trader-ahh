@@ -42,12 +42,13 @@ const PERSONALITIES = [
 ];
 
 const AI_MODELS = [
-  { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', provider: 'openrouter' },
   { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'openrouter' },
-  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', provider: 'openrouter' },
-  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B', provider: 'openrouter' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS-120B', provider: 'openrouter' },
   { id: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'openrouter' },
-  { id: 'xiaomi/mimo-v2-flash', name: 'MiMo V2 Flash', provider: 'openrouter' },
+  { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', provider: 'openrouter' },
+  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', provider: 'openrouter' },
+  { id: 'openai/gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'openrouter' },
+  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openrouter' },
 ];
 
 interface DebateSession {

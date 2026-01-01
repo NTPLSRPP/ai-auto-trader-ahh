@@ -38,7 +38,7 @@ func Load() *Config {
 	cfg = &Config{
 		// OpenRouter
 		OpenRouterAPIKey: getEnv("OPENROUTER_API_KEY", ""),
-		OpenRouterModel:  getEnv("OPENROUTER_MODEL", "deepseek/deepseek-chat"),
+		OpenRouterModel:  getEnv("OPENROUTER_MODEL", "deepseek/deepseek-v3.2"),
 
 		// Binance
 		BinanceAPIKey:    getEnv("BINANCE_API_KEY", ""),
