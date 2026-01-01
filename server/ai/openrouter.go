@@ -159,7 +159,17 @@ Trading Rules:
 - CLOSE: Close existing position
 - Only trade when confidence >= 70
 - Consider trend, volume, RSI, MACD, EMA crossovers, and support/resistance levels
-- Higher volatility (ATR) = wider stops needed`
+- Higher volatility (ATR) = wider stops needed
+
+CRITICAL POSITION MANAGEMENT RULES:
+- NEVER recommend CLOSE if the position is at a loss (negative PnL) - let the stop-loss handle it
+- NEVER recommend CLOSE if profit is less than 3% - let the take-profit order do its job
+- Only recommend CLOSE for early profit-taking when profit is ABOVE 3% AND there's a clear reversal signal
+- The stop-loss and take-profit orders are already placed on the exchange at 2% and 6% respectively
+- Trust the exchange orders to manage exits - your job is to find ENTRY points, not micromanage exits
+- HOLD positions and let them develop - don't close after 5 minutes just because of minor price fluctuations
+- A position should typically be held for at least 30-60 minutes unless there's a major market reversal
+- Stop over-trading: if you just opened or closed a position, HOLD for the next few cycles`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},

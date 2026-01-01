@@ -22,7 +22,7 @@ type Engine struct {
 	name         string
 	cfg          *config.Config
 	strategy     *store.Strategy
-	aiClient     *ai.Client        // Legacy AI client (for backward compatibility)
+	aiClient     *ai.Client // Legacy AI client (for backward compatibility)
 	binance      *exchange.BinanceClient
 	dataProvider *market.DataProvider
 
@@ -37,10 +37,10 @@ type Engine struct {
 	mu      sync.RWMutex
 
 	// State
-	lastDecisions       map[string]*ai.TradingDecision
-	lastFullDecision    *decision.FullDecision // Latest full decision with CoT
-	positions           map[string]*exchange.Position
-	account             *exchange.AccountInfo
+	lastDecisions    map[string]*ai.TradingDecision
+	lastFullDecision *decision.FullDecision // Latest full decision with CoT
+	positions        map[string]*exchange.Position
+	account          *exchange.AccountInfo
 
 	// Stores
 	decisionStore *store.DecisionStore
@@ -558,8 +558,35 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		if currentPos.PositionAmt < 0 {
 			side = "SHORT"
 		}
+
+		// SAFETY CHECK: Don't close positions that are at a loss
+		// Let the stop-loss order on the exchange handle losing positions
+		if currentPos.UnrealizedProfit < 0 {
+			log.Printf("[%s][%s] BLOCKED: AI tried to close %s position at loss ($%.2f). Letting SL/TP orders handle exit.",
+				e.name, symbol, side, currentPos.UnrealizedProfit)
+			return fmt.Errorf("blocked: refusing to close losing position (PnL: $%.2f), let SL/TP handle it", currentPos.UnrealizedProfit)
+		}
+
+		// SAFETY CHECK 2: Don't close positions with less than 3% profit
+		// Let them run to the take-profit target (6%) instead of taking tiny profits
+		var pnlPct float64
+		if currentPos.EntryPrice > 0 {
+			if currentPos.PositionAmt > 0 { // Long position
+				pnlPct = ((currentPos.MarkPrice - currentPos.EntryPrice) / currentPos.EntryPrice) * 100
+			} else { // Short position
+				pnlPct = ((currentPos.EntryPrice - currentPos.MarkPrice) / currentPos.EntryPrice) * 100
+			}
+		}
+
+		minProfitToClose := 3.0 // Minimum 3% profit to allow manual close
+		if pnlPct < minProfitToClose {
+			log.Printf("[%s][%s] BLOCKED: AI tried to close %s position at only %.2f%% profit ($%.2f). Let TP order run to 6%% target.",
+				e.name, symbol, side, pnlPct, currentPos.UnrealizedProfit)
+			return fmt.Errorf("blocked: profit %.2f%% below %.2f%% threshold, let TP order reach target", pnlPct, minProfitToClose)
+		}
+
 		holdDuration := e.GetHoldDuration(symbol, side)
-		log.Printf("[%s][%s] Closing %s position: %.4f (held for %v)", e.name, symbol, side, currentPos.PositionAmt, holdDuration)
+		log.Printf("[%s][%s] Closing %s position: %.4f (held for %v, profit: $%.2f = %.2f%%)", e.name, symbol, side, currentPos.PositionAmt, holdDuration, currentPos.UnrealizedProfit, pnlPct)
 		if _, err := e.binance.ClosePosition(ctx, symbol, currentPos.PositionAmt); err != nil {
 			return fmt.Errorf("failed to close position: %w", err)
 		}
@@ -608,13 +635,13 @@ func (e *Engine) GetStatus() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"trader_id":    e.id,
-		"trader_name":  e.name,
-		"running":      e.running,
-		"strategy":     strategyName,
-		"pairs":        e.getTradingPairs(),
-		"positions":    positions,
-		"decisions":    decisions,
+		"trader_id":   e.id,
+		"trader_name": e.name,
+		"running":     e.running,
+		"strategy":    strategyName,
+		"pairs":       e.getTradingPairs(),
+		"positions":   positions,
+		"decisions":   decisions,
 	}
 }
 
@@ -628,10 +655,10 @@ func (e *Engine) GetAccount() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_equity":     e.account.TotalMarginBalance,
-		"wallet_balance":   e.account.TotalWalletBalance,
-		"available":        e.account.AvailableBalance,
-		"unrealized_pnl":   e.account.TotalUnrealizedProfit,
+		"total_equity":   e.account.TotalMarginBalance,
+		"wallet_balance": e.account.TotalWalletBalance,
+		"available":      e.account.AvailableBalance,
+		"unrealized_pnl": e.account.TotalUnrealizedProfit,
 	}
 }
 
@@ -1178,13 +1205,47 @@ func (e *Engine) getSLTPPercentages(decision *ai.TradingDecision) (slPct, tpPct 
 }
 
 // placeBracketOrders places SL/TP orders on Binance and tracks them
+// CRITICAL: If this fails after retries, we close the position to prevent unprotected exposure
 func (e *Engine) placeBracketOrders(ctx context.Context, symbol string, isLong bool, entryPrice, slPct, tpPct float64) {
 	log.Printf("[%s][%s] Placing bracket orders: SL=%.1f%%, TP=%.1f%%, entry=$%.2f",
 		e.name, symbol, slPct, tpPct, entryPrice)
 
-	slOrder, tpOrder, err := e.binance.PlaceBracketOrders(ctx, symbol, isLong, entryPrice, slPct, tpPct)
+	// Retry up to 3 times
+	var slOrder, tpOrder *exchange.Order
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		slOrder, tpOrder, err = e.binance.PlaceBracketOrders(ctx, symbol, isLong, entryPrice, slPct, tpPct)
+		if err == nil {
+			break
+		}
+		log.Printf("[%s][%s] Bracket order attempt %d failed: %v", e.name, symbol, attempt, err)
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+		}
+	}
+
 	if err != nil {
-		log.Printf("[%s][%s] Failed to place bracket orders: %v", e.name, symbol, err)
+		// CRITICAL: Failed to place protection orders after all retries
+		// Close the position immediately to prevent unprotected exposure
+		log.Printf("[%s][%s] CRITICAL: Failed to place bracket orders after 3 attempts. Closing position for safety!", e.name, symbol)
+
+		// Get current position to close it
+		positions, posErr := e.binance.GetPositions(ctx)
+		if posErr != nil {
+			log.Printf("[%s][%s] ERROR: Cannot get positions to close: %v", e.name, symbol, posErr)
+			return
+		}
+
+		for _, pos := range positions {
+			if pos.Symbol == symbol && pos.PositionAmt != 0 {
+				if _, closeErr := e.binance.ClosePosition(ctx, symbol, pos.PositionAmt); closeErr != nil {
+					log.Printf("[%s][%s] ERROR: Failed to close unprotected position: %v", e.name, symbol, closeErr)
+				} else {
+					log.Printf("[%s][%s] Closed unprotected position for safety", e.name, symbol)
+				}
+				break
+			}
+		}
 		return
 	}
 
