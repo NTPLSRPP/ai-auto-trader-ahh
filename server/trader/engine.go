@@ -508,13 +508,10 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			log.Printf("[%s][%s] Already in LONG position, skipping BUY", e.name, symbol)
 			return fmt.Errorf("skipped: already in LONG position")
 		}
+		// Require explicit close of opposite position (matching NOFX behavior)
 		if hasPosition && currentPos.PositionAmt < 0 {
-			log.Printf("[%s][%s] Closing SHORT position before opening LONG", e.name, symbol)
-			if _, err := e.binance.ClosePosition(ctx, symbol, currentPos.PositionAmt); err != nil {
-				return fmt.Errorf("failed to close short: %w", err)
-			}
-			e.clearPositionTracking(symbol, "SHORT")
-			e.cancelBracketOrders(ctx, symbol)
+			log.Printf("[%s][%s] Already has SHORT position, close it first before opening LONG", e.name, symbol)
+			return fmt.Errorf("skipped: %s already has SHORT position, close it first", symbol)
 		}
 		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
@@ -534,13 +531,10 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			log.Printf("[%s][%s] Already in SHORT position, skipping SELL", e.name, symbol)
 			return fmt.Errorf("skipped: already in SHORT position")
 		}
+		// Require explicit close of opposite position (matching NOFX behavior)
 		if hasPosition && currentPos.PositionAmt > 0 {
-			log.Printf("[%s][%s] Closing LONG position before opening SHORT", e.name, symbol)
-			if _, err := e.binance.ClosePosition(ctx, symbol, currentPos.PositionAmt); err != nil {
-				return fmt.Errorf("failed to close long: %w", err)
-			}
-			e.clearPositionTracking(symbol, "LONG")
-			e.cancelBracketOrders(ctx, symbol)
+			log.Printf("[%s][%s] Already has LONG position, close it first before opening SHORT", e.name, symbol)
+			return fmt.Errorf("skipped: %s already has LONG position, close it first", symbol)
 		}
 		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
@@ -988,7 +982,7 @@ func (e *Engine) enforceMinPositionSize(positionSizeUSD float64, symbol string) 
 			minSize = rc.MinPositionUSD
 		}
 		if minSize <= 0 {
-			minSize = 60.0 // Default $60 for BTC/ETH
+			minSize = 12.0 // Default $12 for BTC/ETH (matching NOFX)
 		}
 	} else {
 		// Try new field first
@@ -1388,13 +1382,17 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Calculate current P&L %
+		// Calculate current P&L % (including leverage, matching NOFX)
 		var pnlPct float64
+		leverage := float64(pos.Leverage)
+		if leverage <= 0 {
+			leverage = 10 // Default leverage
+		}
 		if pos.EntryPrice > 0 {
 			if pos.PositionAmt > 0 {
-				pnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * 100
+				pnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * leverage * 100
 			} else {
-				pnlPct = ((pos.EntryPrice - pos.MarkPrice) / pos.EntryPrice) * 100
+				pnlPct = ((pos.EntryPrice - pos.MarkPrice) / pos.EntryPrice) * leverage * 100
 			}
 		}
 
@@ -1412,12 +1410,15 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Calculate drawdown from peak
-		drawdown := peakPnL - pnlPct
+		// Calculate drawdown from peak (relative percentage, matching NOFX)
+		var drawdownPct float64
+		if peakPnL > 0 && pnlPct < peakPnL {
+			drawdownPct = ((peakPnL - pnlPct) / peakPnL) * 100
+		}
 
-		if drawdown >= drawdownThreshold {
+		if drawdownPct >= drawdownThreshold {
 			log.Printf("[%s][%s] Drawdown alert: Peak=%.2f%%, Current=%.2f%%, Drawdown=%.2f%% >= %.2f%%",
-				e.name, pos.Symbol, peakPnL, pnlPct, drawdown, drawdownThreshold)
+				e.name, pos.Symbol, peakPnL, pnlPct, drawdownPct, drawdownThreshold)
 
 			// Close the position
 			log.Printf("[%s][%s] Closing position due to drawdown protection", e.name, pos.Symbol)
