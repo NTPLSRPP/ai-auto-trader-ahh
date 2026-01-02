@@ -279,6 +279,7 @@ func (e *Engine) runTradingCycle(ctx context.Context) {
 		// Save equity snapshot
 		e.equityStore.Save(&store.EquitySnapshot{
 			TraderID:      e.id,
+			Timestamp:     time.Now(),
 			TotalEquity:   account.TotalMarginBalance,
 			Balance:       account.TotalWalletBalance,
 			UnrealizedPnL: account.TotalUnrealizedProfit,
