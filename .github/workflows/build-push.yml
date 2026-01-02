@@ -21,6 +21,8 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to push tags
 
     steps:
       - name: Checkout repository
