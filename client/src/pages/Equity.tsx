@@ -39,7 +39,8 @@ interface DailyReturn {
 export default function Equity() {
   const [traders, setTraders] = useState<any[]>([]);
   const [selectedTrader, setSelectedTrader] = useState<string>('');
-  const [equityData, setEquityData] = useState<EquityPoint[]>([]);
+  const [allEquityData, setAllEquityData] = useState<EquityPoint[]>([]); // Store all data
+  const [equityData, setEquityData] = useState<EquityPoint[]>([]); // Filtered data for display
   const [account, setAccount] = useState<any>(null);
   const [timeRange, setTimeRange] = useState('1M');
   const [loading, setLoading] = useState(true);
@@ -52,7 +53,12 @@ export default function Equity() {
     if (selectedTrader) {
       loadEquityData();
     }
-  }, [selectedTrader, timeRange]);
+  }, [selectedTrader]);
+
+  // Re-filter when timeRange changes
+  useEffect(() => {
+    setEquityData(filterByTimeRange(allEquityData, timeRange));
+  }, [timeRange, allEquityData]);
 
   const loadTraders = async () => {
     try {
@@ -68,13 +74,42 @@ export default function Equity() {
     }
   };
 
+  // Filter equity data based on time range
+  const filterByTimeRange = (data: EquityPoint[], range: string): EquityPoint[] => {
+    if (!data.length || range === 'ALL') return data;
+
+    const now = new Date();
+    let cutoff: Date;
+
+    switch (range) {
+      case '1D':
+        cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case '1W':
+        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '1M':
+        cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '3M':
+        cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        return data;
+    }
+
+    return data.filter(point => new Date(point.timestamp) >= cutoff);
+  };
+
   const loadEquityData = async () => {
     try {
       const [equityRes, accountRes] = await Promise.all([
         getEquityHistory(selectedTrader).catch(() => ({ data: { history: [] } })),
         getAccount(selectedTrader).catch(() => ({ data: null })),
       ]);
-      setEquityData(equityRes.data.history || []);
+      const allData = equityRes.data.history || [];
+      setAllEquityData(allData); // Store all data
+      setEquityData(filterByTimeRange(allData, timeRange)); // Set filtered data
       setAccount(accountRes.data);
     } catch (err) {
       console.error('Failed to load equity data:', err);

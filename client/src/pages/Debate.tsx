@@ -32,6 +32,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { GlowBadge } from '@/components/ui/glow-badge';
 import { ProgressStat } from '@/components/ui/stat-card';
 import { SpotlightCard, AnimatedBorderCard } from '@/components/ui/spotlight-card';
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal';
 
 // Personality types with colors and emojis
 const PERSONALITIES = [
@@ -88,6 +89,8 @@ export default function Debate() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const { confirm, ConfirmDialog } = useConfirm();
+  const { alert, AlertDialog } = useAlert();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -207,7 +210,11 @@ export default function Debate() {
 
   const handleCreateDebate = async () => {
     if (formData.participants.length < 2) {
-      alert('Please add at least 2 participants');
+      alert({
+        title: 'Validation Error',
+        description: 'Please add at least 2 participants',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -238,7 +245,11 @@ export default function Debate() {
       });
       await loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create debate');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to create debate',
+        variant: 'danger',
+      });
     } finally {
       setCreating(false);
     }
@@ -263,7 +274,13 @@ export default function Debate() {
   };
 
   const handleDeleteDebate = async (sessionId: string) => {
-    if (!confirm('Are you sure you want to delete this debate?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Debate',
+      description: 'Are you sure you want to delete this debate? This action cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await deleteDebate(sessionId);
       if (selectedSession === sessionId) {
@@ -906,6 +923,10 @@ export default function Debate() {
           )}
         </div>
       </div>
+
+      {/* Confirmation and Alert Dialogs */}
+      {ConfirmDialog}
+      {AlertDialog}
     </div>
   );
 }

@@ -82,25 +82,53 @@ export default function History() {
     }
   };
 
+  // Check if a decision is an error/failed entry
+  const isErrorDecision = (reasoning: string, action: string, confidence: number): boolean => {
+    if (!reasoning) return false;
+    const lowerReasoning = reasoning.toLowerCase();
+    const errorPatterns = [
+      'failed',
+      'error',
+      'timeout',
+      'context deadline exceeded',
+      'unable to',
+      'could not',
+    ];
+    return (
+      errorPatterns.some(pattern => lowerReasoning.includes(pattern)) ||
+      (confidence === 0 && action === 'NONE')
+    );
+  };
+
   const loadDecisions = async () => {
     try {
       const res = await getDecisions(selectedTrader);
       const rawDecisions: RawDecision[] = res.data.decisions || [];
 
-      // Flatten the nested decisions
+      // Flatten the nested decisions and filter out errors
       const flatDecisions: Decision[] = [];
       for (const raw of rawDecisions) {
         try {
           const innerDecisions = JSON.parse(raw.decisions || '[]');
           for (const dec of innerDecisions) {
+            const reasoning = dec.reasoning || dec.error || 'No reasoning provided';
+            const action = dec.action || 'NONE';
+            const confidence = dec.confidence || 0;
+
+            // Skip error entries - they shouldn't be shown in trade history
+            if (isErrorDecision(reasoning, action, confidence)) {
+              continue;
+            }
+
             flatDecisions.push({
               id: `${raw.id}-${dec.symbol}`,
               trader_id: raw.trader_id,
               symbol: dec.symbol || 'UNKNOWN',
-              action: dec.action || 'NONE',
-              confidence: dec.confidence || 0,
-              reasoning: dec.reasoning || dec.error || 'No reasoning provided',
+              action: action,
+              confidence: confidence,
+              reasoning: reasoning,
               executed: raw.executed,
+              pnl: dec.pnl,
               created_at: raw.timestamp,
             });
           }

@@ -31,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { GlassCard } from '@/components/ui/glass-card';
 import { GlowBadge } from '@/components/ui/glow-badge';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal';
 
 // Moved outside component to prevent re-renders
 const CollapsibleSection = ({
@@ -94,6 +95,8 @@ export default function Strategies() {
     riskControl: true,
     aiPrompt: false,
   });
+  const { confirm, ConfirmDialog } = useConfirm();
+  const { alert, AlertDialog } = useAlert();
 
   useEffect(() => {
     loadStrategies();
@@ -154,17 +157,31 @@ export default function Strategies() {
       setIsCreating(false);
       loadStrategies();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save strategy');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to save strategy',
+        variant: 'danger',
+      });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this strategy?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Strategy',
+      description: 'Are you sure you want to delete this strategy? This action cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await deleteStrategy(id);
       loadStrategies();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete strategy');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to delete strategy',
+        variant: 'danger',
+      });
     }
   };
 
@@ -324,6 +341,10 @@ export default function Strategies() {
           ))
         )}
       </div>
+
+      {/* Confirmation and Alert Dialogs */}
+      {ConfirmDialog}
+      {AlertDialog}
 
       {/* Strategy Editor Modal */}
       <Dialog open={!!editingStrategy} onOpenChange={(open) => !open && setEditingStrategy(null)}>

@@ -28,6 +28,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { GlowBadge } from '@/components/ui/glow-badge';
 import { StatCard, MiniStat, ProgressStat } from '@/components/ui/stat-card';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { useAlert } from '@/components/ui/confirm-modal';
 
 interface AccountInfo {
   wallet_balance: number;
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { alert, AlertDialog } = useAlert();
 
   useEffect(() => {
     loadTraders();
@@ -96,7 +98,11 @@ export default function Dashboard() {
       loadTraders();
       loadTraderData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to start trader');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to start trader',
+        variant: 'danger',
+      });
     }
   };
 
@@ -480,6 +486,9 @@ export default function Dashboard() {
           </GlassCard>
         </div>
       </div>
+
+      {/* Alert Dialog */}
+      {AlertDialog}
     </div>
   );
 }

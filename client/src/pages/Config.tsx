@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { GlassCard } from '@/components/ui/glass-card';
 import { GlowBadge } from '@/components/ui/glow-badge';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal';
 
 export default function Config() {
   const [traders, setTraders] = useState<Trader[]>([]);
@@ -21,6 +22,8 @@ export default function Config() {
   const [editingTrader, setEditingTrader] = useState<Partial<Trader> | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const { confirm, ConfirmDialog } = useConfirm();
+  const { alert, AlertDialog } = useAlert();
 
   // Preset models list - used to detect if current model is custom
   const PRESET_MODELS = [
@@ -94,12 +97,21 @@ export default function Config() {
       setIsCreating(false);
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save trader');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to save trader',
+        variant: 'danger',
+      });
     }
   };
 
   const handleDelete = async (id: string) => {
-    const confirmed = window.confirm('Are you sure you want to delete this trader?');
+    const confirmed = await confirm({
+      title: 'Delete Trader',
+      description: 'Are you sure you want to delete this trader? This action cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger',
+    });
     if (!confirmed) return;
 
     try {
@@ -109,7 +121,11 @@ export default function Config() {
       await loadData();
     } catch (err: any) {
       console.error('Delete failed:', err);
-      alert(err.response?.data?.error || 'Failed to delete trader');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to delete trader',
+        variant: 'danger',
+      });
     }
   };
 
@@ -260,6 +276,10 @@ export default function Config() {
           ))
         )}
       </div>
+
+      {/* Confirmation and Alert Dialogs */}
+      {ConfirmDialog}
+      {AlertDialog}
 
       {/* Trader Editor Modal */}
       <Dialog open={!!editingTrader} onOpenChange={(open) => !open && setEditingTrader(null)}>

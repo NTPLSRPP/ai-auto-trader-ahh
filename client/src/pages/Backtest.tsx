@@ -39,6 +39,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { GlowBadge } from '@/components/ui/glow-badge';
 import { StatCard, ProgressStat } from '@/components/ui/stat-card';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal';
 
 interface BacktestConfig {
   symbols: string[];
@@ -98,6 +99,8 @@ export default function Backtest() {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const { confirm, ConfirmDialog } = useConfirm();
+  const { alert, AlertDialog } = useAlert();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -168,14 +171,24 @@ export default function Backtest() {
       setSelectedRun(res.data.run_id);
       await loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to start backtest');
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to start backtest',
+        variant: 'danger',
+      });
     } finally {
       setCreating(false);
     }
   };
 
   const handleDeleteBacktest = async (runId: string) => {
-    if (!confirm('Are you sure you want to delete this backtest?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Backtest',
+      description: 'Are you sure you want to delete this backtest? This action cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await deleteBacktest(runId);
       if (selectedRun === runId) {
@@ -674,6 +687,10 @@ export default function Backtest() {
           )}
         </div>
       </div>
+
+      {/* Confirmation and Alert Dialogs */}
+      {ConfirmDialog}
+      {AlertDialog}
     </div>
   );
 }
