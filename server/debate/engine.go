@@ -18,7 +18,8 @@ import (
 type MarketContextProvider func(symbols []string) (*MarketContext, error)
 
 // TradeExecutor is a function that executes trades based on debate decisions
-type TradeExecutor func(decisions []*Decision) error
+// Now includes session for accessing Binance credentials
+type TradeExecutor func(session *Session, decisions []*Decision) error
 
 // Engine runs debate sessions
 type Engine struct {
@@ -82,6 +83,9 @@ func (e *Engine) CreateSession(req *CreateSessionRequest) (*SessionWithDetails, 
 			CreatedAt:            time.Now(),
 			AutoCycle:            req.AutoCycle,
 			CycleIntervalMinutes: req.CycleIntervalMinutes,
+			BinanceAPIKey:        req.BinanceAPIKey,
+			BinanceSecretKey:     req.BinanceSecretKey,
+			BinanceTestnet:       req.BinanceTestnet,
 		},
 		Participants: make([]*Participant, 0),
 		Messages:     make([]*Message, 0),
@@ -315,9 +319,21 @@ func (e *Engine) executeDecisions(session *SessionWithDetails) {
 		return
 	}
 
+	// Check if Binance credentials are configured
+	if session.BinanceAPIKey == "" || session.BinanceSecretKey == "" {
+		log.Printf("[Debate] No Binance credentials configured for session, skipping execution")
+		e.sendEvent(session.ID, &Event{
+			Type:      "execution_error",
+			SessionID: session.ID,
+			Data:      "No Binance API credentials configured. Please add your API key and secret to enable auto-execution.",
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
 	log.Printf("[Debate] Executing %d decisions from cycle #%d", len(session.FinalDecisions), session.CycleCount)
 
-	if err := executor(session.FinalDecisions); err != nil {
+	if err := executor(&session.Session, session.FinalDecisions); err != nil {
 		log.Printf("[Debate] Trade execution error: %v", err)
 		e.sendEvent(session.ID, &Event{
 			Type:      "execution_error",

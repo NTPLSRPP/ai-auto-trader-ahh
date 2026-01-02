@@ -1003,9 +1003,17 @@ func (s *Server) buildDebateMarketContextForCycle(symbols []string) (*debate.Mar
 }
 
 // executeDebateDecisions executes the consensus decisions from a debate
-func (s *Server) executeDebateDecisions(decisions []*debate.Decision) error {
+// Uses session-specific Binance credentials for trade execution
+func (s *Server) executeDebateDecisions(session *debate.Session, decisions []*debate.Decision) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+
+	// Create session-specific Binance client using session's credentials
+	binanceClient := exchange.NewBinanceClient(
+		session.BinanceAPIKey,
+		session.BinanceSecretKey,
+		session.BinanceTestnet,
+	)
 
 	for _, d := range decisions {
 		if d.Action == "wait" || d.Action == "hold" {
@@ -1021,7 +1029,7 @@ func (s *Server) executeDebateDecisions(decisions []*debate.Decision) error {
 		log.Printf("[Debate] Executing %s on %s (confidence: %d%%)", d.Action, d.Symbol, d.Confidence)
 
 		// Get current price
-		ticker, err := s.binanceClient.GetTicker(ctx, d.Symbol)
+		ticker, err := binanceClient.GetTicker(ctx, d.Symbol)
 		if err != nil {
 			log.Printf("[Debate] Failed to get price for %s: %v", d.Symbol, err)
 			d.Error = err.Error()
@@ -1032,7 +1040,7 @@ func (s *Server) executeDebateDecisions(decisions []*debate.Decision) error {
 		positionSizeUSD := d.PositionSizeUSD
 		if positionSizeUSD <= 0 {
 			// Use position percentage of account
-			account, err := s.binanceClient.GetAccountInfo(ctx)
+			account, err := binanceClient.GetAccountInfo(ctx)
 			if err == nil && d.PositionPct > 0 {
 				positionSizeUSD = account.AvailableBalance * d.PositionPct
 			} else {
@@ -1058,7 +1066,7 @@ func (s *Server) executeDebateDecisions(decisions []*debate.Decision) error {
 			continue
 		}
 
-		order, err := s.binanceClient.PlaceOrder(ctx, d.Symbol, side, "MARKET", quantity, 0)
+		order, err := binanceClient.PlaceOrder(ctx, d.Symbol, side, "MARKET", quantity, 0)
 		if err != nil {
 			log.Printf("[Debate] Failed to execute %s on %s: %v", d.Action, d.Symbol, err)
 			d.Error = err.Error()
@@ -1072,10 +1080,10 @@ func (s *Server) executeDebateDecisions(decisions []*debate.Decision) error {
 	}
 
 	// Save equity snapshot after execution
-	account, err := s.binanceClient.GetAccountInfo(ctx)
+	account, err := binanceClient.GetAccountInfo(ctx)
 	if err == nil {
 		s.equityStore.Save(&store.EquitySnapshot{
-			TraderID:      "debate_auto",
+			TraderID:      "debate_" + session.ID,
 			Timestamp:     time.Now(),
 			TotalEquity:   account.TotalMarginBalance,
 			Balance:       account.TotalWalletBalance,

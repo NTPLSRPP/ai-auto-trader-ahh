@@ -84,6 +84,11 @@ type Session struct {
 	CompletedAt     time.Time    `json:"completed_at"`
 	Error           string       `json:"error,omitempty"`
 
+	// Binance credentials for trade execution
+	BinanceAPIKey    string `json:"binance_api_key,omitempty"`
+	BinanceSecretKey string `json:"-"` // Never expose in JSON responses
+	BinanceTestnet   bool   `json:"binance_testnet"`
+
 	// Auto-cycle settings
 	AutoCycle            bool  `json:"auto_cycle"`              // Enable continuous debate cycles
 	CycleIntervalMinutes int   `json:"cycle_interval_minutes"`  // Minutes between cycles
@@ -170,6 +175,10 @@ type CreateSessionRequest struct {
 	Participants         []CreateParticipantRequest  `json:"participants"`
 	AutoCycle            bool                        `json:"auto_cycle"`
 	CycleIntervalMinutes int                         `json:"cycle_interval_minutes"`
+	// Binance credentials for trade execution
+	BinanceAPIKey    string `json:"binance_api_key"`
+	BinanceSecretKey string `json:"binance_secret_key"`
+	BinanceTestnet   bool   `json:"binance_testnet"`
 }
 
 // CreateParticipantRequest is the request to add a participant

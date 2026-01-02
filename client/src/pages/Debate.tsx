@@ -12,6 +12,8 @@ import {
   XCircle,
   Brain,
   Timer,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   listDebates,
@@ -102,7 +104,14 @@ export default function Debate() {
     participants: [] as { ai_model_id: string; ai_model_name: string; provider: string; personality: string }[],
     auto_cycle: false,
     cycle_interval_minutes: 5,
+    // Binance credentials for auto-execution
+    binance_api_key: '',
+    binance_secret_key: '',
+    binance_testnet: true,
   });
+
+  // Show/hide secrets
+  const [showSecrets, setShowSecrets] = useState(false);
 
   // Selected model and personality for adding participants
   const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
@@ -229,6 +238,9 @@ export default function Debate() {
         participants: formData.participants,
         auto_cycle: formData.auto_cycle,
         cycle_interval_minutes: formData.cycle_interval_minutes,
+        binance_api_key: formData.binance_api_key,
+        binance_secret_key: formData.binance_secret_key,
+        binance_testnet: formData.binance_testnet,
       };
       const res = await createDebate(data);
       setSelectedSession(res.data.id || res.data.session_id);
@@ -242,6 +254,9 @@ export default function Debate() {
         participants: [],
         auto_cycle: false,
         cycle_interval_minutes: 5,
+        binance_api_key: '',
+        binance_secret_key: '',
+        binance_testnet: true,
       });
       await loadData();
     } catch (err: any) {
@@ -447,6 +462,54 @@ export default function Debate() {
                     </div>
                   )}
                 </div>
+
+                {/* Binance Credentials (shown when auto_execute is enabled) */}
+                {formData.auto_execute && (
+                  <div className="space-y-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <div className="flex items-center gap-2 text-yellow-500">
+                      <span className="text-sm font-medium">Binance API Credentials (Required for Auto-Execute)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>API Key</Label>
+                        <Input
+                          value={formData.binance_api_key}
+                          onChange={(e) => setFormData({ ...formData, binance_api_key: e.target.value })}
+                          placeholder="Enter Binance API Key"
+                          className="glass font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Secret Key</Label>
+                        <div className="relative">
+                          <Input
+                            type={showSecrets ? 'text' : 'password'}
+                            value={formData.binance_secret_key}
+                            onChange={(e) => setFormData({ ...formData, binance_secret_key: e.target.value })}
+                            placeholder="Enter Binance Secret Key"
+                            className="glass font-mono text-xs pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSecrets(!showSecrets)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={formData.binance_testnet}
+                        onCheckedChange={(v) => setFormData({ ...formData, binance_testnet: !!v })}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        Use Testnet (recommended for testing)
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Participants */}
                 <div className="space-y-3">
