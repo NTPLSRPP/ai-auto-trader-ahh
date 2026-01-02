@@ -1077,6 +1077,35 @@ func (s *Server) executeDebateDecisions(session *debate.Session, decisions []*de
 		d.ExecutedAt = time.Now()
 		d.OrderID = fmt.Sprintf("%d", order.OrderID)
 		log.Printf("[Debate] Executed order %d: %s %s %.4f @ %.2f", order.OrderID, side, d.Symbol, quantity, ticker.Price)
+
+		// Place stop-loss and take-profit orders for new positions
+		if d.Action == "open_long" || d.Action == "open_short" || d.Action == "BUY" || d.Action == "SELL" {
+			isLong := d.Action == "open_long" || d.Action == "BUY"
+			closeSide := "SELL"
+			if !isLong {
+				closeSide = "BUY"
+			}
+
+			// Place stop-loss order
+			if d.StopLoss > 0 {
+				slOrder, err := binanceClient.PlaceStopLoss(ctx, d.Symbol, closeSide, 0, d.StopLoss)
+				if err != nil {
+					log.Printf("[Debate] Failed to place stop-loss for %s: %v", d.Symbol, err)
+				} else {
+					log.Printf("[Debate] Stop-loss placed for %s: ID=%d @ %.2f", d.Symbol, slOrder.OrderID, d.StopLoss)
+				}
+			}
+
+			// Place take-profit order
+			if d.TakeProfit > 0 {
+				tpOrder, err := binanceClient.PlaceTakeProfit(ctx, d.Symbol, closeSide, 0, d.TakeProfit)
+				if err != nil {
+					log.Printf("[Debate] Failed to place take-profit for %s: %v", d.Symbol, err)
+				} else {
+					log.Printf("[Debate] Take-profit placed for %s: ID=%d @ %.2f", d.Symbol, tpOrder.OrderID, d.TakeProfit)
+				}
+			}
+		}
 	}
 
 	// Save equity snapshot after execution
