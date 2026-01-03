@@ -577,66 +577,104 @@ func (c *BinanceClient) CancelAllOrders(ctx context.Context, symbol string) erro
 	return err
 }
 
-// PlaceStopLoss places a stop-loss order (STOP_MARKET)
+// PlaceStopLoss places a stop-loss order (STOP_MARKET) using Algo Order API
 // For LONG positions: side should be "SELL", stopPrice below entry
 // For SHORT positions: side should be "BUY", stopPrice above entry
+// Note: As of 2025-12-09, Binance requires STOP_MARKET orders to use /fapi/v1/algoOrder endpoint
 func (c *BinanceClient) PlaceStopLoss(ctx context.Context, symbol, side string, quantity, stopPrice float64) (*Order, error) {
 	params := url.Values{}
 	params.Set("symbol", symbol)
 	params.Set("side", side)
 	params.Set("type", "STOP_MARKET")
+	params.Set("algoType", "CONDITIONAL")
 	params.Set("closePosition", "true") // Close entire position when triggered
 
-	// Set stop price with proper precision
+	// Set trigger price with proper precision (renamed from stopPrice for algo orders)
 	pricePrecision := c.getPricePrecision(symbol)
-	params.Set("stopPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
+	params.Set("triggerPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
 
-	log.Printf("[Binance] Placing STOP_LOSS: %s %s @ %.2f", symbol, side, stopPrice)
+	log.Printf("[Binance] Placing STOP_LOSS (Algo): %s %s @ %.2f", symbol, side, stopPrice)
 
-	body, err := c.doRequest(ctx, "POST", "/fapi/v1/order", params, true)
+	body, err := c.doRequest(ctx, "POST", "/fapi/v1/algoOrder", params, true)
 	if err != nil {
 		log.Printf("[Binance] Stop-loss order failed: %v", err)
 		return nil, err
 	}
 
-	var order Order
-	if err := json.Unmarshal(body, &order); err != nil {
-		return nil, fmt.Errorf("failed to parse order: %w", err)
+	// Parse algo order response
+	var algoResp struct {
+		AlgoID       int64  `json:"algoId"`
+		AlgoStatus   string `json:"algoStatus"`
+		AlgoType     string `json:"algoType"`
+		Symbol       string `json:"symbol"`
+		Side         string `json:"side"`
+		TriggerPrice string `json:"triggerPrice"`
+	}
+	if err := json.Unmarshal(body, &algoResp); err != nil {
+		return nil, fmt.Errorf("failed to parse algo order: %w", err)
 	}
 
-	log.Printf("[Binance] Stop-loss placed: ID=%d, Status=%s", order.OrderID, order.Status)
-	return &order, nil
+	// Convert to Order struct for compatibility
+	order := &Order{
+		OrderID: algoResp.AlgoID,
+		Symbol:  algoResp.Symbol,
+		Status:  algoResp.AlgoStatus,
+		Side:    algoResp.Side,
+		Type:    "STOP_MARKET",
+	}
+
+	log.Printf("[Binance] Stop-loss placed: AlgoID=%d, Status=%s", order.OrderID, order.Status)
+	return order, nil
 }
 
-// PlaceTakeProfit places a take-profit order (TAKE_PROFIT_MARKET)
+// PlaceTakeProfit places a take-profit order (TAKE_PROFIT_MARKET) using Algo Order API
 // For LONG positions: side should be "SELL", stopPrice above entry
 // For SHORT positions: side should be "BUY", stopPrice below entry
+// Note: As of 2025-12-09, Binance requires TAKE_PROFIT_MARKET orders to use /fapi/v1/algoOrder endpoint
 func (c *BinanceClient) PlaceTakeProfit(ctx context.Context, symbol, side string, quantity, stopPrice float64) (*Order, error) {
 	params := url.Values{}
 	params.Set("symbol", symbol)
 	params.Set("side", side)
 	params.Set("type", "TAKE_PROFIT_MARKET")
+	params.Set("algoType", "CONDITIONAL")
 	params.Set("closePosition", "true") // Close entire position when triggered
 
-	// Set stop price with proper precision
+	// Set trigger price with proper precision (renamed from stopPrice for algo orders)
 	pricePrecision := c.getPricePrecision(symbol)
-	params.Set("stopPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
+	params.Set("triggerPrice", strconv.FormatFloat(stopPrice, 'f', pricePrecision, 64))
 
-	log.Printf("[Binance] Placing TAKE_PROFIT: %s %s @ %.2f", symbol, side, stopPrice)
+	log.Printf("[Binance] Placing TAKE_PROFIT (Algo): %s %s @ %.2f", symbol, side, stopPrice)
 
-	body, err := c.doRequest(ctx, "POST", "/fapi/v1/order", params, true)
+	body, err := c.doRequest(ctx, "POST", "/fapi/v1/algoOrder", params, true)
 	if err != nil {
 		log.Printf("[Binance] Take-profit order failed: %v", err)
 		return nil, err
 	}
 
-	var order Order
-	if err := json.Unmarshal(body, &order); err != nil {
-		return nil, fmt.Errorf("failed to parse order: %w", err)
+	// Parse algo order response
+	var algoResp struct {
+		AlgoID       int64  `json:"algoId"`
+		AlgoStatus   string `json:"algoStatus"`
+		AlgoType     string `json:"algoType"`
+		Symbol       string `json:"symbol"`
+		Side         string `json:"side"`
+		TriggerPrice string `json:"triggerPrice"`
+	}
+	if err := json.Unmarshal(body, &algoResp); err != nil {
+		return nil, fmt.Errorf("failed to parse algo order: %w", err)
 	}
 
-	log.Printf("[Binance] Take-profit placed: ID=%d, Status=%s", order.OrderID, order.Status)
-	return &order, nil
+	// Convert to Order struct for compatibility
+	order := &Order{
+		OrderID: algoResp.AlgoID,
+		Symbol:  algoResp.Symbol,
+		Status:  algoResp.AlgoStatus,
+		Side:    algoResp.Side,
+		Type:    "TAKE_PROFIT_MARKET",
+	}
+
+	log.Printf("[Binance] Take-profit placed: AlgoID=%d, Status=%s", order.OrderID, order.Status)
+	return order, nil
 }
 
 // PlaceBracketOrders places both stop-loss and take-profit orders for a position
