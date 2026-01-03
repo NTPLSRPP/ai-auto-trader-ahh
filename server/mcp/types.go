@@ -71,7 +71,7 @@ type Config struct {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Timeout:    120 * time.Second,
+		Timeout:    180 * time.Second, // 3 minutes for slower models like Gemini
 		MaxRetries: 3,
 		RetryDelay: 2 * time.Second,
 	}
