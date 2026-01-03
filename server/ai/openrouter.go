@@ -64,22 +64,11 @@ type TradingDecision struct {
 }
 
 func NewClient(apiKey, model string) *Client {
-	// Custom transport to avoid HTTP/2 issues and connection reuse problems
-	transport := &http.Transport{
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		DisableCompression:  false,
-		DisableKeepAlives:   true, // Force new connection each request
-		ForceAttemptHTTP2:   false, // Disable HTTP/2
-		TLSHandshakeTimeout: 30 * time.Second,
-	}
-
 	return &Client{
 		apiKey: apiKey,
 		model:  model,
 		httpClient: &http.Client{
-			Timeout:   180 * time.Second, // 3 minutes for slower models
-			Transport: transport,
+			Timeout: 180 * time.Second, // 3 minutes for slower models
 		},
 	}
 }
