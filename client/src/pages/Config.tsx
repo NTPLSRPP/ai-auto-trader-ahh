@@ -449,48 +449,6 @@ export default function Config() {
                     </div>
                   </div>
 
-                  {/* Reasoning Mode Toggle */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                    <div className="flex items-center gap-3">
-                      <Zap className="w-4 h-4 text-purple-400" />
-                      <div>
-                        <span className="font-medium text-sm">Reasoning Mode</span>
-                        <p className="text-xs text-muted-foreground">Chain-of-thought for smarter decisions (slower)</p>
-                      </div>
-                    </div>
-                    <Checkbox
-                      checked={editingTrader.config?.enable_reasoning ?? false}
-                      onCheckedChange={(v) => setEditingTrader({
-                        ...editingTrader,
-                        config: { ...editingTrader.config!, enable_reasoning: !!v }
-                      })}
-                    />
-                  </div>
-
-                  {editingTrader.config?.enable_reasoning && (
-                    <div className="space-y-2">
-                      <Label>Reasoning Model</Label>
-                      <Select
-                        value={editingTrader.config?.reasoning_model || 'deepseek/deepseek-r1'}
-                        onValueChange={(v) => setEditingTrader({
-                          ...editingTrader,
-                          config: { ...editingTrader.config!, reasoning_model: v }
-                        })}
-                      >
-                        <SelectTrigger className="glass">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="deepseek/deepseek-r1">DeepSeek R1</SelectItem>
-                          <SelectItem value="deepseek/deepseek-r1-0528">DeepSeek R1 (0528)</SelectItem>
-                          <SelectItem value="openai/o1">OpenAI o1</SelectItem>
-                          <SelectItem value="openai/o1-mini">OpenAI o1-mini</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">Expect 10-60s response times with reasoning models</p>
-                    </div>
-                  )}
-
                   {editingTrader.config?.use_custom_model ? (
                     <div className="space-y-2">
                       <Label>Custom Model ID</Label>
@@ -538,10 +496,31 @@ export default function Config() {
                           <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
                           <SelectItem value="openai/gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
+                          <SelectItem value="deepseek/deepseek-r1">DeepSeek R1 (Reasoning)</SelectItem>
+                          <SelectItem value="openai/o1">OpenAI o1 (Reasoning)</SelectItem>
+                          <SelectItem value="openai/o1-mini">OpenAI o1-mini (Reasoning)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   )}
+
+                  {/* Reasoning Mode Toggle */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-4 h-4 text-purple-400" />
+                      <div>
+                        <span className="font-medium text-sm">Reasoning Mode</span>
+                        <p className="text-xs text-muted-foreground">Enable chain-of-thought output parsing</p>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={editingTrader.config?.enable_reasoning ?? false}
+                      onCheckedChange={(v) => setEditingTrader({
+                        ...editingTrader,
+                        config: { ...editingTrader.config!, enable_reasoning: !!v }
+                      })}
+                    />
+                  </div>
                 </div>
               </GlassCard>
 

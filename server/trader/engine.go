@@ -401,21 +401,14 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 		formattedData += fmt.Sprintf("\n--- Strategy Rules ---\n%s\n", e.strategy.Config.CustomPrompt)
 	}
 
-	// Check if reasoning mode is enabled (from trader config)
-	originalModel := e.aiClient.GetModel()
-	if e.traderConfig != nil && e.traderConfig.EnableReasoning && e.traderConfig.ReasoningModel != "" {
-		log.Printf("[%s][%s] Reasoning mode enabled, using model: %s", e.name, symbol, e.traderConfig.ReasoningModel)
-		e.aiClient.SetModel(e.traderConfig.ReasoningModel)
+	// Log if reasoning mode is enabled
+	if e.traderConfig != nil && e.traderConfig.EnableReasoning {
+		log.Printf("[%s][%s] Reasoning mode enabled, expecting chain-of-thought output", e.name, symbol)
 	}
 
 	// Get AI decision
 	decision, rawResponse, err := e.aiClient.GetTradingDecision(formattedData)
 	tradeLog.RawAI = rawResponse
-
-	// Restore original model if we changed it
-	if e.aiClient.GetModel() != originalModel {
-		e.aiClient.SetModel(originalModel)
-	}
 
 	if err != nil {
 		tradeLog.Error = fmt.Sprintf("AI decision failed: %v", err)
