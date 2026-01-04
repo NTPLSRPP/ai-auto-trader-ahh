@@ -404,21 +404,22 @@ export default function Strategies() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Trading Pairs</Label>
+                    <Label>Trading Pairs (comma or space separated)</Label>
                     <Input
-                      value={editingStrategy.config.coin_source.static_coins.join(', ')}
-                      onChange={(e) => setEditingStrategy({
+                      key={editingStrategy.id + '-coins'}
+                      defaultValue={editingStrategy.config.coin_source.static_coins.join(', ')}
+                      onBlur={(e) => setEditingStrategy({
                         ...editingStrategy,
                         config: {
                           ...editingStrategy.config,
                           coin_source: {
                             ...editingStrategy.config.coin_source,
-                            static_coins: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                            static_coins: e.target.value.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
                           }
                         }
                       })}
                       className="glass"
-                      placeholder="BTCUSDT, ETHUSDT"
+                      placeholder="BTCUSDT, ETHUSDT, SOLUSDT"
                     />
                   </div>
                 </div>
