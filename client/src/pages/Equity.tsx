@@ -21,14 +21,20 @@ import {
 } from 'lucide-react';
 import { getTraders, getEquityHistory, getAccount } from '../lib/api';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GlassCard } from '@/components/ui/glass-card';
 import { StatCard } from '@/components/ui/stat-card';
 
 interface EquityPoint {
   timestamp: string;
-  total_equity: number;  // matches server field name
+  total_equity: number; // matches server field name
 }
 
 interface DailyReturn {
@@ -75,7 +81,10 @@ export default function Equity() {
   };
 
   // Filter equity data based on time range
-  const filterByTimeRange = (data: EquityPoint[], range: string): EquityPoint[] => {
+  const filterByTimeRange = (
+    data: EquityPoint[],
+    range: string,
+  ): EquityPoint[] => {
     if (!data.length || range === 'ALL') return data;
 
     const now = new Date();
@@ -104,7 +113,9 @@ export default function Equity() {
   const loadEquityData = async () => {
     try {
       const [equityRes, accountRes] = await Promise.all([
-        getEquityHistory(selectedTrader).catch(() => ({ data: { history: [] } })),
+        getEquityHistory(selectedTrader).catch(() => ({
+          data: { history: [] },
+        })),
         getAccount(selectedTrader).catch(() => ({ data: null })),
       ]);
       const allData = equityRes.data.history || [];
@@ -118,12 +129,14 @@ export default function Equity() {
 
   // Calculate metrics
   const calculateMetrics = () => {
-    if (equityData.length < 2) return { pnl: 0, pnlPercent: 0, maxDrawdown: 0, dailyReturns: [] };
+    if (equityData.length < 2)
+      return { pnl: 0, pnlPercent: 0, maxDrawdown: 0, dailyReturns: [] };
 
     const firstEquity = equityData[0]?.total_equity || 0;
     const lastEquity = equityData[equityData.length - 1]?.total_equity || 0;
     const pnl = lastEquity - firstEquity;
-    const pnlPercent = firstEquity > 0 ? ((lastEquity - firstEquity) / firstEquity) * 100 : 0;
+    const pnlPercent =
+      firstEquity > 0 ? ((lastEquity - firstEquity) / firstEquity) * 100 : 0;
 
     // Calculate max drawdown
     let peak = equityData[0]?.total_equity || 0;
@@ -160,12 +173,20 @@ export default function Equity() {
             <motion.div
               className="absolute inset-0 border-4 border-primary/20 rounded-full"
               animate={{ opacity: [0.3, 0.8, 0.3] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
             />
             <motion.div
               className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
               animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
             >
               <div className="w-4 h-4 bg-primary rounded" />
             </motion.div>
@@ -188,7 +209,9 @@ export default function Equity() {
             <TrendingUp className="w-8 h-8" />
             Equity Charts
           </h1>
-          <p className="text-muted-foreground">Track portfolio performance over time</p>
+          <p className="text-muted-foreground">
+            Track portfolio performance over time
+          </p>
         </motion.div>
 
         <div className="flex gap-2">
@@ -197,17 +220,20 @@ export default function Equity() {
               <SelectValue placeholder="Select trader" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="debate_auto">
-                🔄 Debate Auto-Cycle
-              </SelectItem>
-              {traders.map((t) => (
+              <SelectItem value="debate_auto">🔄 Debate Auto-Cycle</SelectItem>
+              {traders.map(t => (
                 <SelectItem key={t.id} value={t.id}>
                   {t.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={loadEquityData} className="glass">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={loadEquityData}
+            className="glass"
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
@@ -215,7 +241,7 @@ export default function Equity() {
 
       {/* Time Range Selector */}
       <div className="flex gap-2">
-        {['1D', '1W', '1M', '3M', 'ALL'].map((range) => (
+        {['1D', '1W', '1M', '3M', 'ALL'].map(range => (
           <Button
             key={range}
             variant={timeRange === range ? 'default' : 'outline'}
@@ -279,7 +305,13 @@ export default function Equity() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={equityData}>
                     <defs>
-                      <linearGradient id="colorEquityMain" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient
+                        id="colorEquityMain"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
                         <stop
                           offset="5%"
                           stopColor={metrics.pnl >= 0 ? '#22c55e' : '#ef4444'}
@@ -297,12 +329,12 @@ export default function Equity() {
                       dataKey="timestamp"
                       stroke="#71717a"
                       fontSize={12}
-                      tickFormatter={(v) => new Date(v).toLocaleDateString()}
+                      tickFormatter={v => new Date(v).toLocaleDateString()}
                     />
                     <YAxis
                       stroke="#71717a"
                       fontSize={12}
-                      tickFormatter={(v) => `$${v.toLocaleString()}`}
+                      tickFormatter={v => `$${v.toLocaleString()}`}
                       domain={['dataMin - 100', 'dataMax + 100']}
                     />
                     <Tooltip
@@ -313,8 +345,8 @@ export default function Equity() {
                         color: '#ffffff',
                       }}
                       labelStyle={{ color: '#a1a1aa' }}
-                      labelFormatter={(v) => new Date(v).toLocaleString()}
-                      formatter={(v) => [`$${Number(v).toFixed(2)}`, 'Equity']}
+                      labelFormatter={v => new Date(v).toLocaleString()}
+                      formatter={v => [`$${Number(v).toFixed(2)}`, 'Equity']}
                     />
                     <Area
                       type="monotone"
@@ -330,7 +362,9 @@ export default function Equity() {
               <div className="h-[450px] flex items-center justify-center">
                 <div className="text-center">
                   <TrendingUp className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No equity data available</p>
+                  <p className="text-muted-foreground">
+                    No equity data available
+                  </p>
                   <p className="text-sm text-muted-foreground/60">
                     Start trading to see your equity curve
                   </p>
@@ -349,12 +383,12 @@ export default function Equity() {
                       dataKey="date"
                       stroke="#71717a"
                       fontSize={12}
-                      tickFormatter={(v) => new Date(v).toLocaleDateString()}
+                      tickFormatter={v => new Date(v).toLocaleDateString()}
                     />
                     <YAxis
                       stroke="#71717a"
                       fontSize={12}
-                      tickFormatter={(v) => `${v.toFixed(1)}%`}
+                      tickFormatter={v => `${v.toFixed(1)}%`}
                     />
                     <Tooltip
                       contentStyle={{
@@ -364,13 +398,21 @@ export default function Equity() {
                         color: '#ffffff',
                       }}
                       labelStyle={{ color: '#a1a1aa' }}
-                      labelFormatter={(v) => new Date(v).toLocaleDateString()}
-                      formatter={(v: number) => [
-                        <span style={{ color: v >= 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
-                          {v.toFixed(2)}%
-                        </span>,
-                        'Return'
-                      ]}
+                      labelFormatter={v => new Date(v).toLocaleDateString()}
+                      formatter={(v: number | undefined) => {
+                        if (v === undefined) return ['--', 'Return'];
+                        return [
+                          <span
+                            style={{
+                              color: v >= 0 ? '#22c55e' : '#ef4444',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {v.toFixed(2)}%
+                          </span>,
+                          'Return',
+                        ];
+                      }}
                     />
                     <Bar dataKey="return" radius={[4, 4, 0, 0]}>
                       {metrics.dailyReturns.map((entry, index) => (
