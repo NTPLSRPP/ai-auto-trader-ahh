@@ -28,6 +28,10 @@ type TraderConfig struct {
 	AIProvider string `json:"ai_provider"` // "openrouter"
 	AIModel    string `json:"ai_model"`    // model name
 
+	// Reasoning mode settings
+	EnableReasoning bool   `json:"enable_reasoning"` // Use chain-of-thought reasoning
+	ReasoningModel  string `json:"reasoning_model"`  // Model to use for reasoning (e.g., "deepseek/deepseek-r1")
+
 	// Exchange credentials
 	APIKey    string `json:"api_key"`
 	SecretKey string `json:"secret_key"`

@@ -34,8 +34,9 @@ type ChatResponse struct {
 	ID      string `json:"id"`
 	Choices []struct {
 		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			Role      string `json:"role"`
+			Content   string `json:"content"`
+			Reasoning string `json:"reasoning"` // Chain-of-thought from reasoning models
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -49,6 +50,12 @@ type ChatResponse struct {
 		Type    string      `json:"type"`
 		Code    interface{} `json:"code"` // Can be string or number depending on API response
 	} `json:"error,omitempty"`
+}
+
+// ChatResult holds the response content and optional reasoning
+type ChatResult struct {
+	Content   string
+	Reasoning string
 }
 
 type TradingDecision struct {
@@ -73,7 +80,26 @@ func NewClient(apiKey, model string) *Client {
 	}
 }
 
+// SetModel changes the model used for requests
+func (c *Client) SetModel(model string) {
+	c.model = model
+}
+
+// GetModel returns the current model
+func (c *Client) GetModel() string {
+	return c.model
+}
+
 func (c *Client) Chat(messages []Message) (string, error) {
+	result, err := c.ChatWithReasoning(messages)
+	if err != nil {
+		return "", err
+	}
+	return result.Content, nil
+}
+
+// ChatWithReasoning returns both content and reasoning (for reasoning models)
+func (c *Client) ChatWithReasoning(messages []Message) (*ChatResult, error) {
 	start := time.Now()
 
 	req := ChatRequest{
@@ -85,7 +111,7 @@ func (c *Client) Chat(messages []Message) (string, error) {
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Log prompt size for debugging
@@ -97,7 +123,7 @@ func (c *Client) Chat(messages []Message) (string, error) {
 
 	httpReq, err := http.NewRequest("POST", OpenRouterBaseURL+"/chat/completions", bytes.NewBuffer(body))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -109,37 +135,47 @@ func (c *Client) Chat(messages []Message) (string, error) {
 	elapsed := time.Since(start)
 	if err != nil {
 		log.Printf("[OpenRouter] Request failed after %v: %v", elapsed, err)
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 	log.Printf("[OpenRouter] Response received in %v (status: %d)", elapsed, resp.StatusCode)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Check for HTTP errors first
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var chatResp ChatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
 		// Log the raw response for debugging
 		log.Printf("[OpenRouter] Failed to parse response: %v\nRaw response: %s", err, string(respBody))
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	if chatResp.Error != nil {
-		return "", fmt.Errorf("API error: %s", chatResp.Error.Message)
+		return nil, fmt.Errorf("API error: %s", chatResp.Error.Message)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned")
+		return nil, fmt.Errorf("no response choices returned")
 	}
 
-	return chatResp.Choices[0].Message.Content, nil
+	result := &ChatResult{
+		Content:   chatResp.Choices[0].Message.Content,
+		Reasoning: chatResp.Choices[0].Message.Reasoning,
+	}
+
+	// Log if reasoning was returned
+	if result.Reasoning != "" {
+		log.Printf("[OpenRouter] Reasoning received (%d chars)", len(result.Reasoning))
+	}
+
+	return result, nil
 }
 
 func (c *Client) GetTradingDecision(marketData string) (*TradingDecision, string, error) {
@@ -188,10 +224,17 @@ CRITICAL POSITION MANAGEMENT RULES:
 		{Role: "user", Content: "Analyze this market data and provide your trading decision:\n\n" + marketData},
 	}
 
-	response, err := c.Chat(messages)
+	result, err := c.ChatWithReasoning(messages)
 	if err != nil {
 		return nil, "", fmt.Errorf("AI chat failed: %w", err)
 	}
+
+	// Log reasoning if present (from reasoning models like deepseek-r1)
+	if result.Reasoning != "" {
+		log.Printf("[OpenRouter] AI Reasoning:\n%s", result.Reasoning)
+	}
+
+	response := result.Content
 
 	// Parse JSON from response
 	var decision TradingDecision

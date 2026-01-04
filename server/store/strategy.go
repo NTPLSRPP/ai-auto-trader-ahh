@@ -31,11 +31,23 @@ type StrategyConfig struct {
 	// Risk control configuration
 	RiskControl RiskControlConfig `json:"risk_control"`
 
+	// AI configuration
+	AI AIConfig `json:"ai"`
+
 	// Custom AI prompt additions
 	CustomPrompt string `json:"custom_prompt"`
 
 	// Trading interval in minutes
 	TradingInterval int `json:"trading_interval"`
+}
+
+// AIConfig defines AI model settings
+type AIConfig struct {
+	// Enable reasoning mode (uses models like deepseek-r1 that show chain-of-thought)
+	EnableReasoning bool `json:"enable_reasoning"`
+
+	// Reasoning model to use when reasoning is enabled (default: deepseek/deepseek-r1)
+	ReasoningModel string `json:"reasoning_model"`
 }
 
 // CoinSourceConfig defines how to select coins
@@ -163,6 +175,10 @@ func DefaultStrategyConfig() StrategyConfig {
 			// Drawdown monitoring
 			DrawdownCloseThreshold: 40.0, // Close at 40% drawdown from peak
 			MinProfitForDrawdown:   5.0,  // Only apply when profit > 5%
+		},
+		AI: AIConfig{
+			EnableReasoning: false,
+			ReasoningModel:  "deepseek/deepseek-r1",
 		},
 		CustomPrompt:    "",
 		TradingInterval: 5,

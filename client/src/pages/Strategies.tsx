@@ -649,21 +649,85 @@ export default function Strategies() {
                 </div>
               </CollapsibleSection>
 
-              {/* Custom AI Prompt */}
-              <CollapsibleSection title="Custom AI Prompt" icon={Brain} isExpanded={expandedSections.aiPrompt} onToggle={() => toggleSection('aiPrompt')}>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Add custom instructions for the AI trading decisions. This will be appended to the system prompt.
-                  </p>
-                  <Textarea
-                    value={editingStrategy.config.custom_prompt}
-                    onChange={(e) => setEditingStrategy({
-                      ...editingStrategy,
-                      config: { ...editingStrategy.config, custom_prompt: e.target.value }
-                    })}
-                    className="glass min-h-[120px] resize-none"
-                    placeholder="Add custom instructions for the AI trading decisions..."
-                  />
+              {/* AI Settings */}
+              <CollapsibleSection title="AI Settings" icon={Brain} isExpanded={expandedSections.aiPrompt} onToggle={() => toggleSection('aiPrompt')}>
+                <div className="space-y-4">
+                  {/* Reasoning Mode Toggle */}
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-purple-500/20">
+                          <Zap className="w-4 h-4 text-purple-400" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium">Reasoning Mode</h4>
+                          <p className="text-xs text-muted-foreground">Enable chain-of-thought reasoning for smarter decisions (slower)</p>
+                        </div>
+                      </div>
+                      <Checkbox
+                        checked={editingStrategy.config.ai?.enable_reasoning ?? false}
+                        onCheckedChange={(checked) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            ai: {
+                              ...editingStrategy.config.ai,
+                              enable_reasoning: checked as boolean
+                            }
+                          }
+                        })}
+                      />
+                    </div>
+
+                    {editingStrategy.config.ai?.enable_reasoning && (
+                      <div className="space-y-2 pt-3 border-t border-white/10">
+                        <Label>Reasoning Model</Label>
+                        <Select
+                          value={editingStrategy.config.ai?.reasoning_model || 'deepseek/deepseek-r1'}
+                          onValueChange={(v) => setEditingStrategy({
+                            ...editingStrategy,
+                            config: {
+                              ...editingStrategy.config,
+                              ai: {
+                                ...editingStrategy.config.ai,
+                                reasoning_model: v
+                              }
+                            }
+                          })}
+                        >
+                          <SelectTrigger className="glass">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="deepseek/deepseek-r1">DeepSeek R1</SelectItem>
+                            <SelectItem value="deepseek/deepseek-r1-0528">DeepSeek R1 (0528)</SelectItem>
+                            <SelectItem value="openai/o1">OpenAI o1</SelectItem>
+                            <SelectItem value="openai/o1-mini">OpenAI o1-mini</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Reasoning models think step-by-step before deciding. Expect 10-60s response times.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Custom Prompt */}
+                  <div className="space-y-2">
+                    <Label>Custom AI Prompt</Label>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Add custom instructions for the AI trading decisions. This will be appended to the system prompt.
+                    </p>
+                    <Textarea
+                      value={editingStrategy.config.custom_prompt}
+                      onChange={(e) => setEditingStrategy({
+                        ...editingStrategy,
+                        config: { ...editingStrategy.config, custom_prompt: e.target.value }
+                      })}
+                      className="glass min-h-[120px] resize-none"
+                      placeholder="Add custom instructions for the AI trading decisions..."
+                    />
+                  </div>
                 </div>
               </CollapsibleSection>
 

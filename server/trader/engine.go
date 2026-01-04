@@ -22,7 +22,8 @@ type Engine struct {
 	name         string
 	cfg          *config.Config
 	strategy     *store.Strategy
-	aiClient     *ai.Client // Legacy AI client (for backward compatibility)
+	traderConfig *store.TraderConfig // Trader-specific config (for reasoning mode, etc.)
+	aiClient     *ai.Client          // Legacy AI client (for backward compatibility)
 	binance      *exchange.BinanceClient
 	dataProvider *market.DataProvider
 
@@ -88,7 +89,7 @@ type TradeLog struct {
 }
 
 // NewEngine creates a new trading engine with strategy support
-func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceClient, strategy *store.Strategy, cfg *config.Config) *Engine {
+func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceClient, strategy *store.Strategy, traderCfg *store.TraderConfig, cfg *config.Config) *Engine {
 	dataProvider := market.NewDataProvider(binance)
 
 	// Create MCP client from config (uses OpenRouter by default)
@@ -117,6 +118,7 @@ func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceCl
 		name:           name,
 		cfg:            cfg,
 		strategy:       strategy,
+		traderConfig:   traderCfg,
 		aiClient:       aiClient,
 		binance:        binance,
 		dataProvider:   dataProvider,
@@ -399,9 +401,21 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 		formattedData += fmt.Sprintf("\n--- Strategy Rules ---\n%s\n", e.strategy.Config.CustomPrompt)
 	}
 
+	// Check if reasoning mode is enabled (from trader config)
+	originalModel := e.aiClient.GetModel()
+	if e.traderConfig != nil && e.traderConfig.EnableReasoning && e.traderConfig.ReasoningModel != "" {
+		log.Printf("[%s][%s] Reasoning mode enabled, using model: %s", e.name, symbol, e.traderConfig.ReasoningModel)
+		e.aiClient.SetModel(e.traderConfig.ReasoningModel)
+	}
+
 	// Get AI decision
 	decision, rawResponse, err := e.aiClient.GetTradingDecision(formattedData)
 	tradeLog.RawAI = rawResponse
+
+	// Restore original model if we changed it
+	if e.aiClient.GetModel() != originalModel {
+		e.aiClient.SetModel(originalModel)
+	}
 
 	if err != nil {
 		tradeLog.Error = fmt.Sprintf("AI decision failed: %v", err)

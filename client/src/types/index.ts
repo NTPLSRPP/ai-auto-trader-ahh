@@ -12,8 +12,14 @@ export interface StrategyConfig {
   coin_source: CoinSourceConfig;
   indicators: IndicatorConfig;
   risk_control: RiskControlConfig;
+  ai: AIConfig;
   custom_prompt: string;
   trading_interval: number;
+}
+
+export interface AIConfig {
+  enable_reasoning: boolean;
+  reasoning_model: string;
 }
 
 export interface CoinSourceConfig {
@@ -67,6 +73,8 @@ export interface TraderConfig {
   secret_key: string;
   testnet: boolean;
   use_custom_model?: boolean;
+  enable_reasoning?: boolean;
+  reasoning_model?: string;
 }
 
 export interface Position {

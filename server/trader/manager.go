@@ -78,7 +78,7 @@ func (m *EngineManager) Start(traderID string) error {
 	binanceClient := exchange.NewBinanceClient(binanceKey, binanceSecret, testnet)
 
 	// Create engine
-	engine := NewEngine(traderID, trader.Name, aiClient, binanceClient, strategy, m.cfg)
+	engine := NewEngine(traderID, trader.Name, aiClient, binanceClient, strategy, &trader.Config, m.cfg)
 
 	// Start engine
 	ctx := context.Background()
