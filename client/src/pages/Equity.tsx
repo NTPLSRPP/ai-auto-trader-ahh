@@ -310,7 +310,9 @@ export default function Equity() {
                         backgroundColor: '#12121a',
                         border: '1px solid rgba(255,255,255,0.1)',
                         borderRadius: '8px',
+                        color: '#ffffff',
                       }}
+                      labelStyle={{ color: '#a1a1aa' }}
                       labelFormatter={(v) => new Date(v).toLocaleString()}
                       formatter={(v) => [`$${Number(v).toFixed(2)}`, 'Equity']}
                     />
@@ -359,7 +361,9 @@ export default function Equity() {
                         backgroundColor: '#12121a',
                         border: '1px solid rgba(255,255,255,0.1)',
                         borderRadius: '8px',
+                        color: '#ffffff',
                       }}
+                      labelStyle={{ color: '#a1a1aa' }}
                       labelFormatter={(v) => new Date(v).toLocaleDateString()}
                       formatter={(v) => [`${Number(v).toFixed(2)}%`, 'Return']}
                     />
