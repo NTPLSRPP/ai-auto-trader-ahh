@@ -1,5 +1,11 @@
 # Passive Income Ahh
 
+[![GitHub stars](https://img.shields.io/github/stars/LynchzDEV/ai-auto-trader-ahh?style=social)](https://github.com/LynchzDEV/ai-auto-trader-ahh/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/LynchzDEV/ai-auto-trader-ahh?style=social)](https://github.com/LynchzDEV/ai-auto-trader-ahh/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/LynchzDEV/ai-auto-trader-ahh)](https://github.com/LynchzDEV/ai-auto-trader-ahh/issues)
+[![GitHub contributors](https://img.shields.io/github/contributors/LynchzDEV/ai-auto-trader-ahh)](https://github.com/LynchzDEV/ai-auto-trader-ahh/graphs/contributors)
+[![GitHub license](https://img.shields.io/github/license/LynchzDEV/ai-auto-trader-ahh)](https://github.com/LynchzDEV/ai-auto-trader-ahh/blob/main/LICENSE)
+
 AI-powered cryptocurrency futures trading platform with multi-AI debate consensus, backtesting, and real-time portfolio management.
 
 ## Features
