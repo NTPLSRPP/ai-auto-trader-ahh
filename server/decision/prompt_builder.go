@@ -84,7 +84,7 @@ You MUST output your decisions in valid JSON format wrapped in <decision> tags:
 <decision>
 [
   {
-    "symbol": "BTCUSDT",
+    "symbol": "<THE_SYMBOL_YOU_ARE_ANALYZING>",
     "action": "open_long",
     "leverage": 10,
     "position_size_usd": 500,
@@ -98,7 +98,7 @@ You MUST output your decisions in valid JSON format wrapped in <decision> tags:
 
 ## Field Descriptions
 
-- symbol: Trading pair (e.g., "BTCUSDT", "ETHUSDT")
+- symbol: The EXACT trading pair you are analyzing (use the symbol from the market data provided, e.g., "BTCUSDT", "ETHUSDT", "DOGEUSDT", etc.)
 - action: One of "open_long", "open_short", "close_long", "close_short", "hold", "wait"
 - leverage: Leverage multiplier (1-20 for BTC/ETH, 1-10 for altcoins)
 - position_size_usd: Position size in USDT
@@ -159,7 +159,7 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 <decision>
 [
   {
-    "symbol": "BTCUSDT",
+    "symbol": "<THE_SYMBOL_YOU_ARE_ANALYZING>",
     "action": "open_long",
     "leverage": 10,
     "position_size_usd": 500,
@@ -173,7 +173,7 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 
 ## 字段说明
 
-- symbol: 交易对 (如 "BTCUSDT", "ETHUSDT")
+- symbol: The EXACT trading pair you are analyzing (use the symbol from the market data, e.g., "BTCUSDT", "ETHUSDT", "DOGEUSDT")
 - action: "open_long", "open_short", "close_long", "close_short", "hold", "wait" 之一
 - leverage: 杠杆倍数 (BTC/ETH 1-20，山寨币 1-10)
 - position_size_usd: 仓位大小（USDT）

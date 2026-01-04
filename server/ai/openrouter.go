@@ -186,12 +186,14 @@ IMPORTANT: You must respond with ONLY a valid JSON object, no other text.
 Response format:
 {
   "action": "BUY" | "SELL" | "HOLD" | "CLOSE",
-  "symbol": "BTCUSDT",
+  "symbol": "<THE_SYMBOL_FROM_MARKET_DATA>",
   "confidence": 0-100,
   "reasoning": "Brief explanation of your decision",
   "stop_loss_pct": 2.0,
   "take_profit_pct": 6.0
 }
+
+IMPORTANT: The "symbol" field must be the EXACT symbol from the market data you are analyzing (e.g., "DOGEUSDT", "SUIUSDT", "BTCUSDT", etc.)
 
 CRITICAL RULES FOR stop_loss_pct AND take_profit_pct:
 - These are PERCENTAGES from entry price (e.g., 2.0 means 2%)
