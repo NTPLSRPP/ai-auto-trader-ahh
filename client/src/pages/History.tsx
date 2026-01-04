@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { getTraders, getDecisions } from '../lib/api';
+import { getTraders, getDecisions, getTrades } from '../lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,12 +41,29 @@ interface Decision {
   created_at: string;
 }
 
+interface Trade {
+  id: number;
+  trader_id: string;
+  symbol: string;
+  side: string;
+  price: number;
+  quantity: number;
+  quote_qty: number;
+  realized_pnl: number;
+  commission: number;
+  timestamp: string;
+  order_id: number;
+}
+
 export default function History() {
   const [traders, setTraders] = useState<any[]>([]);
   const [selectedTrader, setSelectedTrader] = useState<string>('');
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [filteredDecisions, setFilteredDecisions] = useState<Decision[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [filteredTrades, setFilteredTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'trades' | 'decisions'>('trades');
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,12 +78,17 @@ export default function History() {
   useEffect(() => {
     if (selectedTrader) {
       loadDecisions();
+      loadTrades();
     }
   }, [selectedTrader]);
 
   useEffect(() => {
     filterAndSort();
   }, [decisions, searchQuery, actionFilter, sortField, sortDir]);
+
+  useEffect(() => {
+    filterAndSortTrades();
+  }, [trades, searchQuery, actionFilter, sortField, sortDir]);
 
   const loadTraders = async () => {
     try {
@@ -140,6 +162,68 @@ export default function History() {
     } catch (err) {
       console.error('Failed to load decisions:', err);
     }
+  };
+
+  const loadTrades = async () => {
+    try {
+      const res = await getTrades(selectedTrader);
+      setTrades(res.data.trades || []);
+    } catch (err) {
+      console.error('Failed to load trades:', err);
+    }
+  };
+
+  const filterAndSortTrades = () => {
+    let filtered = [...trades];
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((t) => t.symbol.toLowerCase().includes(query));
+    }
+
+    // Action filter
+    if (actionFilter !== 'all') {
+      filtered = filtered.filter((t) => {
+        const side = t.side.toLowerCase();
+        switch (actionFilter) {
+          case 'buy':
+            return side === 'buy';
+          case 'sell':
+            return side === 'sell';
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal: any, bVal: any;
+      switch (sortField) {
+        case 'created_at':
+          aVal = new Date(a.timestamp).getTime();
+          bVal = new Date(b.timestamp).getTime();
+          break;
+        case 'symbol':
+          aVal = a.symbol;
+          bVal = b.symbol;
+          break;
+        case 'pnl':
+          aVal = a.realized_pnl || 0;
+          bVal = b.realized_pnl || 0;
+          break;
+        default:
+          aVal = new Date(a.timestamp).getTime();
+          bVal = new Date(b.timestamp).getTime();
+      }
+      if (sortDir === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      }
+      return aVal < bVal ? 1 : -1;
+    });
+
+    setFilteredTrades(filtered);
   };
 
   const filterAndSort = () => {
@@ -232,8 +316,16 @@ export default function History() {
     a.click();
   };
 
-  // Calculate stats
-  const stats = {
+  // Calculate stats based on view mode
+  const tradeStats = {
+    total: filteredTrades.length,
+    buys: filteredTrades.filter((t) => t.side === 'BUY').length,
+    sells: filteredTrades.filter((t) => t.side === 'SELL').length,
+    totalPnl: filteredTrades.reduce((sum, t) => sum + (t.realized_pnl || 0), 0),
+    totalCommission: filteredTrades.reduce((sum, t) => sum + (t.commission || 0), 0),
+  };
+
+  const decisionStats = {
     total: filteredDecisions.length,
     executed: filteredDecisions.filter((d) => d.executed).length,
     totalPnl: filteredDecisions.reduce((sum, d) => sum + (d.pnl || 0), 0),
@@ -308,46 +400,103 @@ export default function History() {
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button variant="outline" size="icon" onClick={loadDecisions} className="glass">
+          <Button variant="outline" size="icon" onClick={() => { loadDecisions(); loadTrades(); }} className="glass">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <StatCard
-          title="Total Decisions"
-          value={stats.total}
-          icon={HistoryIcon}
-          decimals={0}
-          delay={0}
-        />
-        <StatCard
-          title="Executed"
-          value={stats.executed}
-          icon={TrendingUp}
-          decimals={0}
-          delay={1}
-        />
-        <StatCard
-          title="Total PnL"
-          value={stats.totalPnl}
-          icon={stats.totalPnl >= 0 ? TrendingUp : TrendingDown}
-          prefix="$"
-          decimals={2}
-          colorize
-          delay={2}
-        />
-        <StatCard
-          title="Avg Confidence"
-          value={stats.avgConfidence}
-          icon={Filter}
-          suffix="%"
-          decimals={1}
-          delay={3}
-        />
+      {/* View Mode Tabs */}
+      <div className="flex gap-2">
+        <Button
+          variant={viewMode === 'trades' ? 'default' : 'outline'}
+          onClick={() => setViewMode('trades')}
+          className={viewMode === 'trades' ? '' : 'glass'}
+        >
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Executed Trades ({trades.length})
+        </Button>
+        <Button
+          variant={viewMode === 'decisions' ? 'default' : 'outline'}
+          onClick={() => setViewMode('decisions')}
+          className={viewMode === 'decisions' ? '' : 'glass'}
+        >
+          <HistoryIcon className="h-4 w-4 mr-2" />
+          AI Decisions ({decisions.length})
+        </Button>
       </div>
+
+      {/* Stats */}
+      {viewMode === 'trades' ? (
+        <div className="grid gap-4 md:grid-cols-4">
+          <StatCard
+            title="Total Trades"
+            value={tradeStats.total}
+            icon={HistoryIcon}
+            decimals={0}
+            delay={0}
+          />
+          <StatCard
+            title="Buys / Sells"
+            value={tradeStats.buys}
+            suffix={` / ${tradeStats.sells}`}
+            icon={TrendingUp}
+            decimals={0}
+            delay={1}
+          />
+          <StatCard
+            title="Realized PnL"
+            value={tradeStats.totalPnl}
+            icon={tradeStats.totalPnl >= 0 ? TrendingUp : TrendingDown}
+            prefix="$"
+            decimals={2}
+            colorize
+            delay={2}
+          />
+          <StatCard
+            title="Total Fees"
+            value={tradeStats.totalCommission}
+            icon={Filter}
+            prefix="$"
+            decimals={4}
+            delay={3}
+          />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <StatCard
+            title="Total Decisions"
+            value={decisionStats.total}
+            icon={HistoryIcon}
+            decimals={0}
+            delay={0}
+          />
+          <StatCard
+            title="Executed"
+            value={decisionStats.executed}
+            icon={TrendingUp}
+            decimals={0}
+            delay={1}
+          />
+          <StatCard
+            title="Total PnL"
+            value={decisionStats.totalPnl}
+            icon={decisionStats.totalPnl >= 0 ? TrendingUp : TrendingDown}
+            prefix="$"
+            decimals={2}
+            colorize
+            delay={2}
+          />
+          <StatCard
+            title="Avg Confidence"
+            value={decisionStats.avgConfidence}
+            icon={Filter}
+            suffix="%"
+            decimals={1}
+            delay={3}
+          />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-4 flex-wrap">
@@ -377,90 +526,165 @@ export default function History() {
       {/* Table */}
       <GlassCard className="p-0 overflow-hidden">
         <ScrollArea className="h-[500px]">
-          <table className="w-full trading-table">
-            <thead className="sticky top-0 bg-[#12121a] z-10">
-              <tr className="border-b border-white/5">
-                <th
-                  className="p-4 text-left font-medium text-muted-foreground cursor-pointer hover:text-white"
-                  onClick={() => handleSort('created_at')}
-                >
-                  <div className="flex items-center gap-1">
-                    Date <SortIcon field="created_at" />
-                  </div>
-                </th>
-                <th
-                  className="p-4 text-left font-medium text-muted-foreground cursor-pointer hover:text-white"
-                  onClick={() => handleSort('symbol')}
-                >
-                  <div className="flex items-center gap-1">
-                    Symbol <SortIcon field="symbol" />
-                  </div>
-                </th>
-                <th className="p-4 text-left font-medium text-muted-foreground">Action</th>
-                <th className="p-4 text-right font-medium text-muted-foreground">Confidence</th>
-                <th
-                  className="p-4 text-right font-medium text-muted-foreground cursor-pointer hover:text-white"
-                  onClick={() => handleSort('pnl')}
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    PnL <SortIcon field="pnl" />
-                  </div>
-                </th>
-                <th className="p-4 text-left font-medium text-muted-foreground">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDecisions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-12 text-center">
-                    <HistoryIcon className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                    <p className="text-muted-foreground">No decisions found</p>
-                  </td>
+          {viewMode === 'trades' ? (
+            /* Trades Table */
+            <table className="w-full trading-table">
+              <thead className="sticky top-0 bg-[#12121a] z-10">
+                <tr className="border-b border-white/5">
+                  <th
+                    className="p-4 text-left font-medium text-muted-foreground cursor-pointer hover:text-white"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Date <SortIcon field="created_at" />
+                    </div>
+                  </th>
+                  <th
+                    className="p-4 text-left font-medium text-muted-foreground cursor-pointer hover:text-white"
+                    onClick={() => handleSort('symbol')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Symbol <SortIcon field="symbol" />
+                    </div>
+                  </th>
+                  <th className="p-4 text-left font-medium text-muted-foreground">Side</th>
+                  <th className="p-4 text-right font-medium text-muted-foreground">Price</th>
+                  <th className="p-4 text-right font-medium text-muted-foreground">Quantity</th>
+                  <th className="p-4 text-right font-medium text-muted-foreground">Value</th>
+                  <th
+                    className="p-4 text-right font-medium text-muted-foreground cursor-pointer hover:text-white"
+                    onClick={() => handleSort('pnl')}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      PnL <SortIcon field="pnl" />
+                    </div>
+                  </th>
                 </tr>
-              ) : (
-                filteredDecisions.map((decision) => (
-                  <Dialog key={decision.id}>
-                    <DialogTrigger asChild>
-                      <tr
-                        className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
+              </thead>
+              <tbody>
+                {filteredTrades.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-12 text-center">
+                      <HistoryIcon className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                      <p className="text-muted-foreground">No trades found</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTrades.map((trade) => (
+                    <tr
+                      key={trade.id}
+                      className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                    >
+                      <td className="p-4 text-sm">
+                        {new Date(trade.timestamp).toLocaleString()}
+                      </td>
+                      <td className="p-4 font-medium">{trade.symbol}</td>
+                      <td className="p-4">
+                        <GlowBadge variant={trade.side === 'BUY' ? 'success' : 'danger'}>
+                          {trade.side}
+                        </GlowBadge>
+                      </td>
+                      <td className="p-4 text-right font-mono">${trade.price.toFixed(2)}</td>
+                      <td className="p-4 text-right font-mono">{trade.quantity.toFixed(4)}</td>
+                      <td className="p-4 text-right font-mono">${trade.quote_qty.toFixed(2)}</td>
+                      <td
+                        className={`p-4 text-right font-mono font-medium ${
+                          trade.realized_pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                        }`}
                       >
-                        <td className="p-4 text-sm">
-                          {new Date(decision.created_at).toLocaleString()}
-                        </td>
-                        <td className="p-4 font-medium">{decision.symbol}</td>
-                        <td className="p-4">
-                          <GlowBadge
-                            variant={
-                              ['buy', 'open_long'].includes(decision.action?.toLowerCase())
-                                ? 'success'
-                                : ['sell', 'open_short'].includes(decision.action?.toLowerCase())
-                                ? 'danger'
-                                : ['close', 'close_long', 'close_short'].includes(decision.action?.toLowerCase())
-                                ? 'warning'
-                                : 'secondary'
-                            }
-                          >
-                            {decision.action?.toUpperCase() || 'N/A'}
-                          </GlowBadge>
-                        </td>
-                        <td className="p-4 text-right font-mono">{decision.confidence}%</td>
-                        <td
-                          className={`p-4 text-right font-mono font-medium ${
-                            (decision.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
-                          }`}
+                        {trade.realized_pnl !== 0 ? `$${trade.realized_pnl.toFixed(4)}` : '-'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            /* Decisions Table */
+            <table className="w-full trading-table">
+              <thead className="sticky top-0 bg-[#12121a] z-10">
+                <tr className="border-b border-white/5">
+                  <th
+                    className="p-4 text-left font-medium text-muted-foreground cursor-pointer hover:text-white"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Date <SortIcon field="created_at" />
+                    </div>
+                  </th>
+                  <th
+                    className="p-4 text-left font-medium text-muted-foreground cursor-pointer hover:text-white"
+                    onClick={() => handleSort('symbol')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Symbol <SortIcon field="symbol" />
+                    </div>
+                  </th>
+                  <th className="p-4 text-left font-medium text-muted-foreground">Action</th>
+                  <th className="p-4 text-right font-medium text-muted-foreground">Confidence</th>
+                  <th
+                    className="p-4 text-right font-medium text-muted-foreground cursor-pointer hover:text-white"
+                    onClick={() => handleSort('pnl')}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      PnL <SortIcon field="pnl" />
+                    </div>
+                  </th>
+                  <th className="p-4 text-left font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDecisions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-12 text-center">
+                      <HistoryIcon className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                      <p className="text-muted-foreground">No decisions found</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDecisions.map((decision) => (
+                    <Dialog key={decision.id}>
+                      <DialogTrigger asChild>
+                        <tr
+                          className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
                         >
-                          {decision.pnl !== undefined ? `$${decision.pnl.toFixed(2)}` : '-'}
-                        </td>
-                        <td className="p-4">
-                          <GlowBadge
-                            variant={decision.executed ? 'success' : 'secondary'}
-                            dot={decision.executed}
+                          <td className="p-4 text-sm">
+                            {new Date(decision.created_at).toLocaleString()}
+                          </td>
+                          <td className="p-4 font-medium">{decision.symbol}</td>
+                          <td className="p-4">
+                            <GlowBadge
+                              variant={
+                                ['buy', 'open_long'].includes(decision.action?.toLowerCase())
+                                  ? 'success'
+                                  : ['sell', 'open_short'].includes(decision.action?.toLowerCase())
+                                  ? 'danger'
+                                  : ['close', 'close_long', 'close_short'].includes(decision.action?.toLowerCase())
+                                  ? 'warning'
+                                  : 'secondary'
+                              }
+                            >
+                              {decision.action?.toUpperCase() || 'N/A'}
+                            </GlowBadge>
+                          </td>
+                          <td className="p-4 text-right font-mono">{decision.confidence}%</td>
+                          <td
+                            className={`p-4 text-right font-mono font-medium ${
+                              (decision.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                            }`}
                           >
-                            {decision.executed ? 'Executed' : 'Pending'}
-                          </GlowBadge>
-                        </td>
-                      </tr>
-                    </DialogTrigger>
+                            {decision.pnl !== undefined ? `$${decision.pnl.toFixed(2)}` : '-'}
+                          </td>
+                          <td className="p-4">
+                            <GlowBadge
+                              variant={decision.executed ? 'success' : 'secondary'}
+                              dot={decision.executed}
+                            >
+                              {decision.executed ? 'Executed' : 'Pending'}
+                            </GlowBadge>
+                          </td>
+                        </tr>
+                      </DialogTrigger>
                     <DialogContent className="max-w-xl glass-card border-white/10">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
@@ -522,6 +746,7 @@ export default function History() {
               )}
             </tbody>
           </table>
+          )}
         </ScrollArea>
       </GlassCard>
     </div>

@@ -66,6 +66,7 @@ export const getStatus = (traderId: string) => api.get(`/status?trader_id=${trad
 export const getAccount = (traderId: string) => api.get(`/account?trader_id=${traderId}`);
 export const getPositions = (traderId: string) => api.get(`/positions?trader_id=${traderId}`);
 export const getDecisions = (traderId: string) => api.get(`/decisions?trader_id=${traderId}`);
+export const getTrades = (traderId: string) => api.get(`/trades?trader_id=${traderId}`);
 export const getEquityHistory = (traderId: string) => api.get(`/equity-history?trader_id=${traderId}`);
 
 // Health
