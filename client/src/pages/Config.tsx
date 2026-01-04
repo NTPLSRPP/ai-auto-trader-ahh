@@ -496,9 +496,6 @@ export default function Config() {
                           <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
                           <SelectItem value="openai/gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
-                          <SelectItem value="deepseek/deepseek-r1">DeepSeek R1 (Reasoning)</SelectItem>
-                          <SelectItem value="openai/o1">OpenAI o1 (Reasoning)</SelectItem>
-                          <SelectItem value="openai/o1-mini">OpenAI o1-mini (Reasoning)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

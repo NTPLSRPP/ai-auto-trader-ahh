@@ -365,7 +365,12 @@ export default function Equity() {
                       }}
                       labelStyle={{ color: '#a1a1aa' }}
                       labelFormatter={(v) => new Date(v).toLocaleDateString()}
-                      formatter={(v) => [`${Number(v).toFixed(2)}%`, 'Return']}
+                      formatter={(v: number) => [
+                        <span style={{ color: v >= 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                          {v.toFixed(2)}%
+                        </span>,
+                        'Return'
+                      ]}
                     />
                     <Bar dataKey="return" radius={[4, 4, 0, 0]}>
                       {metrics.dailyReturns.map((entry, index) => (
