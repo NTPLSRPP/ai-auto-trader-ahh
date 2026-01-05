@@ -114,20 +114,19 @@ func (s *TradeStore) GetByTrader(traderID string, limit int) ([]*Trade, error) {
 	return trades, rows.Err()
 }
 
-// GetLastTradeTime returns the timestamp of the most recent trade for a trader
+// GetLastTradeTime returns the timestamp of the most recent trade for a trader (in milliseconds)
 func (s *TradeStore) GetLastTradeTime(traderID string) (int64, error) {
-	var timestamp int64
+	var timestamp *time.Time
 	err := db.QueryRow(`
-		SELECT COALESCE(MAX(timestamp), 0) FROM trades WHERE trader_id = ?
+		SELECT MAX(timestamp) FROM trades WHERE trader_id = ?
 	`, traderID).Scan(&timestamp)
 	if err != nil {
 		return 0, err
 	}
-	// Convert to milliseconds if it's in seconds
-	if timestamp > 0 && timestamp < 1e12 {
-		timestamp *= 1000
+	if timestamp == nil {
+		return 0, nil
 	}
-	return timestamp, nil
+	return timestamp.UnixMilli(), nil
 }
 
 // GetTotalPnL returns the total realized PnL for a trader
