@@ -6,113 +6,148 @@
 [![GitHub contributors](https://img.shields.io/github/contributors/LynchzDEV/ai-auto-trader-ahh)](https://github.com/LynchzDEV/ai-auto-trader-ahh/graphs/contributors)
 [![GitHub license](https://img.shields.io/github/license/LynchzDEV/ai-auto-trader-ahh)](https://github.com/LynchzDEV/ai-auto-trader-ahh/blob/main/LICENSE)
 
-AI-powered cryptocurrency futures trading platform with multi-AI debate consensus, backtesting, and real-time portfolio management.
+An advanced AI-powered cryptocurrency futures trading platform that leverages multi-agent debate consensus, comprehensive backtesting, and real-time portfolio management to automate trading strategies on Binance Futures.
 
-## Features
+## 🚀 Key Features
 
-- **Multi-AI Debate**: Multiple AI personalities analyze markets and reach consensus
-- **Backtesting**: Test strategies against historical data with detailed metrics
-- **Real-time Trading**: Automated execution on Binance Futures
-- **Risk Management**: Stop-loss, take-profit, leverage controls
-- **Modern Dashboard**: Glassmorphism UI with real-time updates
+*   **🤖 Multi-AI Debate System**: Utilizes multiple AI personas (e.g., Risk Manager, Technical Analyst, Fundamentalist) to debate and reach a consensus on trading decisions.
+*   **🧠 Advanced Decision Engine**: Integrates OpenRouter to access top-tier LLMs (DeepSeek, Claude, GPT-4) for market analysis.
+*   **📊 Comprehensive Backtesting**: Robust engine to test strategies against historical Binance data with detailed performance metrics (Sharpe ratio, max drawdown, win rate).
+*   **⚡ Real-time Trading**: Automated, low-latency execution on Binance Futures with support for both Testnet and Mainnet.
+*   **🛡️ Risk Management**: Built-in position sizing, stop-loss/take-profit automation, and leverage controls.
+*   **🖥️ Modern Dashboard**: a sleek, glassmorphism-inspired UI built with React & TailwindCSS for real-time monitoring of positions, equity, and logs.
+*   **📝 Live System Logs**: Real-time streaming of server logs directly to the frontend for easy debugging and monitoring.
+*   **🏆 Strategy Ranking**: Visual comparison of different strategy performances.
 
-## Quick Start
+## 📂 Project Structure
+
+A high-level overview of the codebase structure:
+
+```
+auto-trader-ahh/
+├── client/                 # Frontend Application (React + Vite)
+│   ├── src/
+│   │   ├── components/     # Reusable UI components (Charts, Layouts, etc.)
+│   │   ├── lib/            # API clients and utilities
+│   │   ├── pages/          # Application views (Dashboard, Backtest, Logs, etc.)
+│   │   ├── types/          # TypeScript interfaces
+│   │   └── App.tsx         # Main entry point with routing
+│   ├── Dockerfile          # Frontend container definition
+│   └── package.json        # Frontend dependencies
+│
+├── server/                 # Backend Application (Go)
+│   ├── api/                # HTTP API endpoints and server handlers
+│   ├── backtest/           # Backtesting engine and simulation logic
+│   ├── config/             # Configuration loading and validation
+│   ├── data/               # SQLite database storage
+│   ├── debate/             # Multi-agent debate and consensus logic
+│   ├── decision/           # AI decision-making prompt engineering and parsing
+│   ├── exchange/           # Binance Futures API integration
+│   ├── logger/             # Custom logging and broadcasting system
+│   ├── mcp/                # Model Context Protocol (AI client integration)
+│   ├── store/              # Database repositories (Equity, Trades, Settings)
+│   ├── strategy/           # Strategy interfaces and definitions
+│   ├── trader/             # Core trading engine and execution loop
+│   ├── main.go             # Application entry point
+│   ├── Dockerfile          # Backend container definition
+│   └── go.mod              # Go module definitions
+│
+├── docker-compose.yml      # Container orchestration
+└── README.md               # Project documentation
+```
+
+## 🛠️ Tech Stack
+
+**Backend**
+*   **Language**: Go 1.23
+*   **Database**: SQLite
+*   **AI Integration**: OpenRouter API (DeepSeek, Anthropic, OpenAI)
+*   **Exchange**: Binance Futures API
+*   **Libraries**: generic-go-binance, go-sqlite3
+
+**Frontend**
+*   **Framework**: React 18, Vite
+*   **Language**: TypeScript
+*   **Styling**: TailwindCSS, Framer Motion
+*   **Components**: Shadcn/UI, Lucide Icons
+*   **Visualization**: Recharts
+
+## 🏁 Getting Started
 
 ### Prerequisites
 
-- Go 1.21+
-- Node.js 18+
-- Binance Futures account (testnet recommended)
-- OpenRouter API key
+*   **Go** 1.23+
+*   **Node.js** 20+
+*   **Docker** & **Docker Compose** (recommended)
+*   **Binance Futures Account** (Testnet recommended for development)
+*   **OpenRouter API Key**
 
-### Installation
+### 🐳 Docker Quick Start (Recommended)
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd passive-income-ahh
-   ```
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/LynchzDEV/ai-auto-trader-ahh.git
+    cd ai-auto-trader-ahh
+    ```
 
-2. **Setup Backend**
-   ```bash
-   cd server
-   cp .env.example .env
-   # Edit .env with your API keys
-   go build -o server .
-   ./server
-   ```
+2.  **Configure Environment**:
+    Create a `.env` file in the `server/` directory:
+    ```bash
+    cd server
+    cp .env.example .env
+    ```
+    Edit `.env` and add your keys:
+    ```env
+    OPENROUTER_API_KEY=your_key_here
+    BINANCE_API_KEY=your_binance_key
+    BINANCE_SECRET_KEY=your_binance_secret
+    BINANCE_TESTNET=true
+    ```
 
-3. **Setup Frontend**
-   ```bash
-   cd client
-   npm install
-   npm run dev
-   ```
+3.  **Run with Docker Compose**:
+    ```bash
+    cd ..
+    docker compose up -d --build
+    ```
 
-4. **Access Dashboard**
-   - Frontend: http://localhost:5173
-   - API: http://localhost:8080
+4.  **Access the App**:
+    *   **Dashboard**: [http://localhost:5173](http://localhost:5173)
+    *   **API**: [http://localhost:8080](http://localhost:8080)
 
-## Configuration
+### 🔧 Manual Installation
 
-Edit `server/.env`:
-
+#### Backend
 ```bash
-# AI Configuration
-OPENROUTER_API_KEY=sk-or-v1-your-key
-OPENROUTER_MODEL=deepseek/deepseek-chat
-
-# Binance Configuration
-BINANCE_API_KEY=your-binance-key
-BINANCE_SECRET_KEY=your-binance-secret
-BINANCE_TESTNET=true  # Use testnet for testing!
-
-# Server
-API_PORT=8080
+cd server
+go mod download
+go run main.go
 ```
 
-## Project Structure
-
-```
-passive-income-ahh/
-├── server/          # Go backend (API, trading engine, AI)
-├── client/          # React frontend (Vite + TypeScript)
-├── CLAUDE.md        # AI assistant context
-└── README.md        # This file
+#### Frontend
+```bash
+cd client
+npm install
+npm run dev
 ```
 
-## Screenshots
+## ⚙️ Configuration
 
-*Dashboard with real-time positions and AI decisions*
+The system is highly configurable via the Dashboard "Settings" page or `server/.env`.
 
-## Tech Stack
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| `OPENROUTER_API_KEY` | Key for AI Model access | Required |
+| `OPENROUTER_MODEL` | Specific model to use | `deepseek/deepseek-chat` |
+| `BINANCE_API_KEY` | Binance Futures API Key | Required |
+| `BINANCE_SECRET_KEY`| Binance Futures Secret | Required |
+| `BINANCE_TESTNET` | Use Binance Testnet | `true` |
+| `API_PORT` | Port for the Go server | `8080` |
+| `ACCESS_PASSKEY` | Application password for login | Optional |
 
-**Backend:**
-- Go 1.21
-- Gin (HTTP framework)
-- SQLite (database)
-- OpenRouter (AI providers)
-- Binance Futures API
+## ⚠️ Disclaimer
 
-**Frontend:**
-- React 18
-- TypeScript
-- Vite
-- TailwindCSS
-- shadcn/ui
-- Framer Motion
-- Recharts
+This monitoring and trading software is for **educational and experimental purposes only**. Cryptocurrency trading involves significant financial risk. The authors and contributors are not responsible for any financial losses incurred while using this software. **Use at your own risk.**
 
-## Documentation
+## 📄 License
 
-- [Server README](./server/README.md) - Backend setup and API documentation
-- [Client README](./client/README.md) - Frontend setup and development
-- [CLAUDE.md](./CLAUDE.md) - AI assistant context for development
-
-## Disclaimer
-
-This software is for educational purposes only. Cryptocurrency trading involves substantial risk of loss. Use at your own risk and never trade with money you cannot afford to lose.
-
-## License
-
-MIT
+Distributed under the MIT License. See `LICENSE` for more information.
