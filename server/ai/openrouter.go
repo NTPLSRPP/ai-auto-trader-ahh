@@ -100,6 +100,89 @@ func (c *Client) Chat(messages []Message) (string, error) {
 
 // ChatWithReasoning returns both content and reasoning (for reasoning models)
 func (c *Client) ChatWithReasoning(messages []Message) (*ChatResult, error) {
+	const maxRetries = 3
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		result, err := c.doChat(messages, attempt)
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+
+		// Check if error is retryable (timeout, connection errors, rate limits)
+		if !isRetryableError(err) {
+			return nil, err
+		}
+
+		if attempt < maxRetries {
+			// Exponential backoff: 2s, 4s, 8s
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			log.Printf("[OpenRouter] Retry %d/%d after %v (error: %v)", attempt, maxRetries, backoff, err)
+			time.Sleep(backoff)
+		}
+	}
+
+	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+// isRetryableError checks if the error is transient and worth retrying
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	retryablePatterns := []string{
+		"timeout",
+		"deadline exceeded",
+		"connection reset",
+		"connection refused",
+		"temporary failure",
+		"no such host",
+		"EOF",
+		"stream error",
+		"429", // rate limit
+		"502", // bad gateway
+		"503", // service unavailable
+		"504", // gateway timeout
+	}
+	for _, pattern := range retryablePatterns {
+		if contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// contains performs a case-insensitive substring check
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsLower(toLower(s), toLower(substr)))
+}
+
+func containsLower(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func toLower(s string) string {
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		b[i] = c
+	}
+	return string(b)
+}
+
+// doChat performs a single chat request
+func (c *Client) doChat(messages []Message, attempt int) (*ChatResult, error) {
 	start := time.Now()
 
 	req := ChatRequest{
@@ -119,7 +202,7 @@ func (c *Client) ChatWithReasoning(messages []Message) (*ChatResult, error) {
 	for _, m := range messages {
 		promptSize += len(m.Content)
 	}
-	log.Printf("[OpenRouter] Sending request to %s (prompt size: %d chars, model: %s)", c.model, promptSize, c.model)
+	log.Printf("[OpenRouter] Sending request to %s (prompt size: %d chars, model: %s, attempt: %d)", c.model, promptSize, c.model, attempt)
 
 	httpReq, err := http.NewRequest("POST", OpenRouterBaseURL+"/chat/completions", bytes.NewBuffer(body))
 	if err != nil {

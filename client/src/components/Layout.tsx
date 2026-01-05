@@ -106,8 +106,25 @@ export default function Layout() {
         })}
       </nav>
 
-      {/* Status Footer */}
-      <div className="p-2 lg:p-4 border-t border-white/5">
+      {/* Footer with Logout & Status */}
+      <div className="p-2 lg:p-4 border-t border-white/5 space-y-3">
+        {/* Logout Button */}
+        {authRequired && (
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 lg:px-4 py-2.5 lg:py-3 rounded-xl transition-all text-red-400 hover:text-red-300 hover:bg-red-400/10"
+          >
+            <div className="p-1.5 lg:p-2 rounded-lg bg-red-400/10">
+              <LogOut className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <span className="font-medium text-sm">Log Out</span>
+              <p className="text-xs text-red-400/60">Sign out of session</p>
+            </div>
+          </button>
+        )}
+
+        {/* Status Card */}
         <div className="glass-card p-3 lg:p-4">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 rounded-full bg-green-500 pulse-live" />
