@@ -362,6 +362,18 @@ func (s *Server) handleRecommendPairs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 0. Parse Request Body (Optional Count)
+	var req struct {
+		Count int `json:"count"`
+	}
+	if r.Body != nil {
+		json.NewDecoder(r.Body).Decode(&req)
+	}
+	targetCount := req.Count
+	if targetCount <= 0 {
+		targetCount = 7 // Default
+	}
+
 	// 1. Get Top Volume Coins (Raw Data)
 	tickers, err := s.binanceClient.Get24hTicker(context.Background())
 	if err != nil {
@@ -407,19 +419,19 @@ func (s *Server) handleRecommendPairs(w http.ResponseWriter, r *http.Request) {
 	// 3. Construct AI Prompt
 	prompt := fmt.Sprintf(`You are a crypto trading expert. 
 My current balance: $%.2f
-Objective: Find the best 5-7 trading pairs for high-probability scalping/day-trading.
+Objective: Find the best %d trading pairs for high-probability scalping/day-trading.
 Criteria: High liquidity, good volatility (but not insane/manipulated), clear trends.
 
 Here are the Top 30 pairs by 24h Volume:
-`, account.TotalWalletBalance)
+`, account.TotalWalletBalance, targetCount)
 
 	for _, c := range candidates {
 		prompt += fmt.Sprintf("- %s: Vol=$%.0fM, Chg=%.2f%%\n", c.Symbol, c.QuoteVolume/1000000, c.PriceChange)
 	}
 
-	prompt += `
-Return ONLY a JSON array of strings with the selected 5-7 symbols. Example: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-Result:`
+	prompt += fmt.Sprintf(`
+Return ONLY a JSON array of strings with the selected %d symbols. Example: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+Result:`, targetCount)
 
 	// 4. Call AI
 	// Using CallWithMessages since GetCompletion is not available in interface

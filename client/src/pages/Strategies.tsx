@@ -421,7 +421,11 @@ export default function Strategies() {
                         if (isFindingPairs || !editingStrategy) return;
                         setIsFindingPairs(true);
                         try {
-                          const res = await recommendPairs();
+                          // Dynamic count: Max Positions (min) + 2
+                          const maxPos = editingStrategy.config.risk_control.max_positions || 3;
+                          const targetCount = maxPos + 2;
+
+                          const res = await recommendPairs({ count: targetCount });
                           if (res.data?.pairs) {
                             setEditingStrategy({
                               ...editingStrategy,
