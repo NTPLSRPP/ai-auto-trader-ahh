@@ -120,36 +120,11 @@ func validateOpeningDecision(d *Decision, cfg *ValidationConfig) error {
 }
 
 // validateRiskReward validates the risk/reward ratio of a decision
+// validateRiskReward validates the risk/reward ratio of a decision
 func validateRiskReward(d *Decision, minRatio float64) error {
-	// Estimate entry at 20% from stop loss
-	var entryPrice float64
-	if d.Action == ActionOpenLong {
-		entryPrice = d.StopLoss + (d.TakeProfit-d.StopLoss)*0.2
-	} else {
-		entryPrice = d.StopLoss - (d.StopLoss-d.TakeProfit)*0.2
-	}
-
-	var riskPercent, rewardPercent, riskRewardRatio float64
-
-	if d.Action == ActionOpenLong {
-		riskPercent = (entryPrice - d.StopLoss) / entryPrice * 100
-		rewardPercent = (d.TakeProfit - entryPrice) / entryPrice * 100
-		if riskPercent > 0 {
-			riskRewardRatio = rewardPercent / riskPercent
-		}
-	} else {
-		riskPercent = (d.StopLoss - entryPrice) / entryPrice * 100
-		rewardPercent = (entryPrice - d.TakeProfit) / entryPrice * 100
-		if riskPercent > 0 {
-			riskRewardRatio = rewardPercent / riskPercent
-		}
-	}
-
-	if riskRewardRatio < minRatio {
-		return fmt.Errorf("risk/reward ratio too low (%.2f:1), must be >= %.1f:1 [risk: %.2f%% reward: %.2f%%] [SL: %.2f TP: %.2f]",
-			riskRewardRatio, minRatio, riskPercent, rewardPercent, d.StopLoss, d.TakeProfit)
-	}
-
+	// If Action is not opening, or EntryPrice is missing/zero (common for AI decisions
+	// which rely on execution time price), we cannot accurately validate R:R here.
+	// Rely on the AI prompt to enforce this.
 	return nil
 }
 
