@@ -110,8 +110,8 @@ You MUST output your decisions in valid JSON format wrapped in <decision> tags:
 2. stop_loss and take_profit must be valid price levels (not percentages)
 3. For LONG positions: stop_loss < current_price < take_profit
 4. For SHORT positions: take_profit < current_price < stop_loss
-5. Risk/Reward ratio must be at least 3:1
-6. If no good opportunities exist, use action: "wait" with symbol: "ALL"
+5. Risk/Reward ratio must be at least 1.5:1
+6. If no good opportunities exist, use action: "wait" with the current symbol
 7. Always output valid JSON - use straight quotes, not curly quotes
 8. You CAN recommend close_long/close_short for positions with negative PnL if thesis failed`
 }
@@ -185,8 +185,8 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 2. stop_loss和take_profit必须是有效价格（不是百分比）
 3. 做多：止损 < 当前价格 < 止盈
 4. 做空：止盈 < 当前价格 < 止损
-5. 风险回报比必须至少3:1
-6. 如果没有好机会，使用 action: "wait"，symbol: "ALL"
+5. 风险回报比必须至少1.5:1
+6. 如果没有好机会，使用 action: "wait"，symbol: 当前交易对
 7. 总是输出有效JSON - 使用直引号，不要用弯引号`
 }
 
@@ -215,7 +215,7 @@ Then output your decisions in <decision> tags as shown in the format above.
 
 If there are no actionable opportunities, output:
 <decision>
-[{"symbol": "ALL", "action": "wait", "reasoning": "No favorable setups identified"}]
+[{"symbol": "BTCUSDT", "action": "wait", "reasoning": "No favorable setups identified"}]
 </decision>`
 }
 
@@ -244,7 +244,7 @@ func (pb *PromptBuilder) getDecisionRequirementsZH() string {
 
 如果没有可操作的机会，输出：
 <decision>
-[{"symbol": "ALL", "action": "wait", "reasoning": "未发现有利设置"}]
+[{"symbol": "BTCUSDT", "action": "wait", "reasoning": "未发现有利设置"}]
 </decision>`
 }
 

@@ -311,8 +311,8 @@ CRITICAL RULES FOR stop_loss_pct AND take_profit_pct:
 - These are PERCENTAGES from entry price (e.g., 2.0 means 2%)
 - stop_loss_pct: How far price can move against you before stopping out (1-5%)
 - take_profit_pct: Target profit percentage (3-15%)
-- MUST maintain at least 3:1 reward-to-risk ratio (take_profit_pct >= 3 * stop_loss_pct)
-- Example: stop_loss_pct=2.0, take_profit_pct=6.0 gives 3:1 ratio
+- MUST maintain at least 1.5:1 reward-to-risk ratio (take_profit_pct >= 1.5 * stop_loss_pct)
+- Example: stop_loss_pct=2.0, take_profit_pct=3.0 gives 1.5:1 ratio
 
 Trading Rules:
 - BUY: Open a long position (bullish)
@@ -324,14 +324,12 @@ Trading Rules:
 - Higher volatility (ATR) = wider stops needed
 
 CRITICAL POSITION MANAGEMENT RULES:
-- NEVER recommend CLOSE if the position is at a loss (negative PnL) - let the stop-loss handle it
-- NEVER recommend CLOSE if profit is less than 3% - let the take-profit order do its job
-- Only recommend CLOSE for early profit-taking when profit is ABOVE 3% AND there's a clear reversal signal
-- The stop-loss and take-profit orders are already placed on the exchange at 2% and 6% respectively
-- Trust the exchange orders to manage exits - your job is to find ENTRY points, not micromanage exits
-- HOLD positions and let them develop - don't close after 5 minutes just because of minor price fluctuations
-- A position should typically be held for at least 30-60 minutes unless there's a major market reversal
-- Stop over-trading: if you just opened or closed a position, HOLD for the next few cycles`
+- You have authority to close positions at a loss if the setup is invalidated
+- You MAY close with small profit (<3%) if momentum stalls or reverses
+- Trust your analysis over the rigid TP/SL orders if market structure changes
+- If you see a Reversal Signal, recommend CLOSE immediately (even at loss) then OPEN opposite
+- Positions should be managed dynamically
+- If you just opened or closed a position, evaluate the new state freshly`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},

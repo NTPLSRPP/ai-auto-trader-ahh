@@ -433,6 +433,7 @@ export default function Strategies() {
                                 ...editingStrategy.config,
                                 coin_source: {
                                   ...editingStrategy.config.coin_source,
+                                  source_type: 'static',
                                   static_coins: res.data.pairs
                                 }
                               }

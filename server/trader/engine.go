@@ -466,7 +466,12 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 
 	if hasPosition {
 		formattedData += "\n--- Current Position ---\n"
-		formattedData += fmt.Sprintf("Side: %s\n", map[bool]string{true: "LONG", false: "SHORT"}[pos.PositionAmt > 0])
+		sideStr := map[bool]string{true: "LONG", false: "SHORT"}[pos.PositionAmt > 0]
+		formattedData += fmt.Sprintf("Side: %s\n", sideStr)
+
+		duration := e.GetHoldDuration(symbol, sideStr)
+		formattedData += fmt.Sprintf("Hold Duration: %s\n", duration.Round(time.Second))
+
 		formattedData += fmt.Sprintf("Size: %.4f\n", pos.PositionAmt)
 		formattedData += fmt.Sprintf("Entry Price: $%.2f\n", pos.EntryPrice)
 		formattedData += fmt.Sprintf("Mark Price: $%.2f\n", pos.MarkPrice)
