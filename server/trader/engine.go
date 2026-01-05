@@ -558,9 +558,37 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	log.Printf("[%s][%s] Balance: equity=$%.2f, available=$%.2f, leverage=%dx, positionPct=%.1f%%",
 		e.name, symbol, equity, account.AvailableBalance, leverage, positionPct)
 
-	positionSizeUSD := account.AvailableBalance * (positionPct / 100) * float64(leverage)
-	log.Printf("[%s][%s] Initial position size: $%.2f (%.1f%% of $%.2f * %dx)",
-		e.name, symbol, positionSizeUSD, positionPct, account.AvailableBalance, leverage)
+	// Log decision details if reasoning provided
+	if decision.Reasoning != "" {
+		log.Printf("[%s][%s] %s Reasoning: %s", e.name, symbol, decision.Action, decision.Reasoning)
+	}
+
+	// Calculate position size based on balance and strategy config
+	// Use available balance to calculate position size
+	// Default to 10% of equity if not specified
+	// Use strategy config for max position %
+	maxPosPct := e.getPositionPercent()
+	if e.strategy != nil && e.strategy.Config.RiskControl.MaxPositionPercent > 0 {
+		maxPosPct = e.strategy.Config.RiskControl.MaxPositionPercent
+	}
+
+	// Base calculation
+	positionSizeUSD := (e.account.TotalMarginBalance * maxPosPct) / 100
+
+	// Apply margin safety check (COPIED FROM NOFX)
+	// ⚠️ Auto-adjust position size if insufficient margin
+	// Formula: totalRequired = positionSize/leverage + positionSize*0.001 + positionSize/leverage*0.01
+	//        = positionSize * (1.01/leverage + 0.001)
+	marginFactor := 1.01/float64(leverage) + 0.001
+	maxAffordablePositionSize := e.account.AvailableBalance / marginFactor
+
+	if positionSizeUSD > maxAffordablePositionSize {
+		// Use 98% of max to leave buffer for price fluctuation
+		adjustedSize := maxAffordablePositionSize * 0.98
+		log.Printf("[%s][%s] ⚠️ Position size $%.2f exceeds max affordable $%.2f, auto-reducing to $%.2f",
+			e.name, symbol, positionSizeUSD, maxAffordablePositionSize, adjustedSize)
+		positionSizeUSD = adjustedSize
+	}
 
 	if isOpenAction && !hasPosition {
 		// 3. Enforce position value ratio (cap by equity * ratio)
