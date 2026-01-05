@@ -9,6 +9,7 @@ import Backtest from './pages/Backtest';
 import Debate from './pages/Debate';
 import Equity from './pages/Equity';
 import History from './pages/History';
+import Ranking from './pages/Ranking';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="debate" element={<Debate />} />
             <Route path="equity" element={<Equity />} />
             <Route path="history" element={<History />} />
+            <Route path="ranking" element={<Ranking />} />
             <Route path="strategies" element={<Strategies />} />
             <Route path="config" element={<Config />} />
             <Route path="logs" element={<Logs />} />

@@ -10,6 +10,7 @@ import {
   MessageSquare,
   TrendingUp,
   History,
+  Trophy,
   Zap,
   MoreHorizontal,
   X,
@@ -25,15 +26,16 @@ const navItems = [
   { to: '/debate', icon: MessageSquare, label: 'Debate', description: 'AI consensus' },
   { to: '/equity', icon: TrendingUp, label: 'Equity', description: 'Performance' },
   { to: '/history', icon: History, label: 'History', description: 'Trade log' },
+  { to: '/ranking', icon: Trophy, label: 'Ranking', description: 'Symbol profits' },
   { to: '/strategies', icon: Sparkles, label: 'Strategies', description: 'Define rules' },
   { to: '/config', icon: Settings, label: 'Config', description: 'API keys' },
   { to: '/logs', icon: Activity, label: 'Logs', description: 'AI decisions' },
 ];
 
-// Primary items shown in dock (first 5)
-const primaryNavItems = navItems.slice(0, 5);
+// Primary items shown in dock (first 6, including Ranking)
+const primaryNavItems = navItems.slice(0, 6);
 // Secondary items shown in "More" menu
-const secondaryNavItems = navItems.slice(5);
+const secondaryNavItems = navItems.slice(6);
 
 export default function Layout() {
   const location = useLocation();
@@ -75,13 +77,13 @@ export default function Layout() {
               <NavLink
                 to={item.to}
                 className={`group flex items-center gap-3 px-3 lg:px-4 py-2.5 lg:py-3 rounded-xl transition-all duration-200 ${isActive
-                    ? 'bg-primary/20 text-white glow-border'
-                    : 'text-muted-foreground hover:text-white hover:bg-white/5'
+                  ? 'bg-primary/20 text-white glow-border'
+                  : 'text-muted-foreground hover:text-white hover:bg-white/5'
                   }`}
               >
                 <div className={`p-1.5 lg:p-2 rounded-lg transition-colors ${isActive
-                    ? 'bg-primary/30'
-                    : 'bg-white/5 group-hover:bg-white/10'
+                  ? 'bg-primary/30'
+                  : 'bg-white/5 group-hover:bg-white/10'
                   }`}>
                   <item.icon className="w-4 h-4" />
                 </div>
@@ -214,8 +216,8 @@ export default function Layout() {
                         to={item.to}
                         onClick={() => setIsMoreOpen(false)}
                         className={`flex items-center gap-3 p-3 rounded-xl transition-all ${isActive
-                            ? 'bg-primary/20 text-white'
-                            : 'text-muted-foreground hover:text-white hover:bg-white/5'
+                          ? 'bg-primary/20 text-white'
+                          : 'text-muted-foreground hover:text-white hover:bg-white/5'
                           }`}
                       >
                         <div className={`p-2 rounded-lg ${isActive ? 'bg-primary/30' : 'bg-white/5'
