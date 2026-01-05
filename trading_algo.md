@@ -155,10 +155,11 @@ The system mimics "Bracket Orders" (atomic Entry + SL + TP) by managing three se
 graph TD
     A[Trigger Analysis] --> B[Gather Market & Account Data]
     B --> C["Compute Math Indicators (EMA/RSI/ATR)"]
-    C --> D["Build Prompts (System & User)"]
+    D["Build Prompts (System & User)"]
+    C --> D
     D --> E[Send to AI Model]
     E -->|Think & Decide| F[JSON Response]
-    F --> G[Parse & Validate (Risk Math)]
+    F --> G["Parse & Validate (Risk Math)"]
     G --> H{Safe to Execute?}
     H -->|No| I[Log & Wait]
     H -->|Yes| J[Execute Bracket Order]
