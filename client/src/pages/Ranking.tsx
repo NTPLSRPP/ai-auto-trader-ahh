@@ -321,10 +321,21 @@ export default function Ranking() {
             const x = centerX + Math.cos(angle) * radius * (0.5 + Math.random() * 0.5);
             const y = centerY + Math.sin(angle) * radius * (0.5 + Math.random() * 0.5);
 
-            // Color based on profit/loss
-            const color = symbol.pnl >= 0
-                ? `hsl(${142 + symbol.winRate * 0.3}, 70%, 45%)` // Green variants
-                : `hsl(${0 + (100 - symbol.winRate) * 0.2}, 70%, 50%)`; // Red variants
+            // Generate unique color based on symbol name hash
+            const hashCode = (str: string) => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                return Math.abs(hash);
+            };
+
+            const hue = hashCode(symbol.symbol) % 360;
+            const saturation = 60 + (hashCode(symbol.symbol + 'sat') % 25); // 60-85%
+            const lightness = symbol.pnl >= 0 ? 50 : 40; // Slightly darker for losses
+            const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 
             return {
                 id: symbol.symbol,
