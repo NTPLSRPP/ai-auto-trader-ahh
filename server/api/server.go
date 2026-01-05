@@ -15,6 +15,7 @@ import (
 	"auto-trader-ahh/decision"
 	"auto-trader-ahh/events"
 	"auto-trader-ahh/exchange"
+	"auto-trader-ahh/logger"
 	"auto-trader-ahh/mcp"
 	"auto-trader-ahh/store"
 	"auto-trader-ahh/trader"
@@ -118,6 +119,9 @@ func (s *Server) Start() error {
 	// Settings endpoints
 	mux.HandleFunc("/api/settings", s.authMiddleware(s.handleSettings))
 
+	// System endpoints
+	mux.HandleFunc("/api/logs/stream", s.authMiddleware(s.handleLogStream))
+
 	// Wrap with CORS middleware
 	handler := corsMiddleware(mux)
 
@@ -139,8 +143,11 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Check X-Access-Key header
+		// Check X-Access-Key header or query param
 		accessKey := r.Header.Get("X-Access-Key")
+		if accessKey == "" {
+			accessKey = r.URL.Query().Get("access_key")
+		}
 		if accessKey == "" {
 			s.errorResponse(w, http.StatusUnauthorized, "Access key required")
 			return
@@ -1271,4 +1278,56 @@ func (s *Server) reloadConfig() {
 	s.backtestManager = backtest.NewManager(s.aiClient, s.binanceClient)
 
 	log.Printf("Config reloaded: OpenRouter model=%s, Binance testnet=%v", model, testnet)
+}
+
+// ============ SYSTEM ENDPOINTS ============
+
+func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request) {
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Flush now to send headers
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	flusher.Flush()
+
+	// Get broadcaster and subscribe
+	broadcaster := logger.GetBroadcaster()
+	ch, history := broadcaster.Subscribe()
+	defer broadcaster.Unsubscribe(ch)
+
+	// Send history
+	for _, msg := range history {
+		data, err := json.Marshal(msg)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	}
+	flusher.Flush()
+
+	// Stream new logs
+	// Create a context that cancels when the client disconnects
+	ctx := r.Context()
+
+	for {
+		select {
+		case msg := <-ch:
+			data, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+
+		case <-ctx.Done():
+			return
+		}
+	}
 }

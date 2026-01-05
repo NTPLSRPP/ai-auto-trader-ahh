@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -10,11 +11,16 @@ import (
 	"auto-trader-ahh/api"
 	"auto-trader-ahh/config"
 	"auto-trader-ahh/events"
+	"auto-trader-ahh/logger"
 	"auto-trader-ahh/store"
 	"auto-trader-ahh/trader"
 )
 
 func main() {
+	// Initialize logger broadcaster
+	broadcaster := logger.GetBroadcaster()
+	// Write to both stderr (standard) and our broadcaster
+	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 	fmt.Println("╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║      Passive Income Ahh - AI-Powered Trading System        ║")
 	fmt.Println("║        OpenRouter + Binance Futures                        ║")

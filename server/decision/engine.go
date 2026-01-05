@@ -63,14 +63,14 @@ func (e *Engine) MakeDecision(ctx *Context) (*FullDecision, error) {
 		Stream:      true,
 	}
 
-	fmt.Printf("[Decision] Requesting AI (streaming)... ")
+	log.Printf("[Decision] Requesting AI (streaming)... ")
 
 	// Stream handler to accumulate chunks and print them
 	var fullResponse string
 	handler := func(chunk string) error {
 		fullResponse += chunk
 		// Optional: Print chunks to stdout if you want to see them as they come
-		// fmt.Print(chunk)
+		// log.Printf(chunk)
 		return nil
 	}
 
@@ -84,7 +84,7 @@ func (e *Engine) MakeDecision(ctx *Context) (*FullDecision, error) {
 	// Use content from response object which is built from stream
 	response := responseObj.Content
 
-	fmt.Printf("Done in %v\n", duration)
+	log.Printf("Done in %v\n", duration)
 
 	// Parse response
 	fullDecision, parseErr := ParseFullDecisionResponse(response, e.validationCfg)

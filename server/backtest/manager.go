@@ -3,6 +3,7 @@ package backtest
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -65,7 +66,7 @@ func (m *Manager) Start(ctx context.Context, cfg *Config) (string, error) {
 			for _, symbol := range cfg.Symbols {
 				exchKlines, err := m.exchange.GetHistoricalKlines(runCtx, symbol, cfg.DecisionTimeframe, cfg.StartTS, cfg.EndTS)
 				if err != nil {
-					fmt.Printf("Backtest %s: failed to fetch klines for %s: %v\n", cfg.RunID, symbol, err)
+					log.Printf("Backtest %s: failed to fetch klines for %s: %v\n", cfg.RunID, symbol, err)
 					continue
 				}
 				// Convert exchange.Kline to backtest.Kline
@@ -82,12 +83,12 @@ func (m *Manager) Start(ctx context.Context, cfg *Config) (string, error) {
 					}
 				}
 				runner.LoadKlines(symbol, klines)
-				fmt.Printf("Backtest %s: loaded %d klines for %s\n", cfg.RunID, len(klines), symbol)
+				log.Printf("Backtest %s: loaded %d klines for %s\n", cfg.RunID, len(klines), symbol)
 			}
 		}
 
 		if err := runner.Start(runCtx); err != nil {
-			fmt.Printf("Backtest %s failed: %v\n", cfg.RunID, err)
+			log.Printf("Backtest %s failed: %v\n", cfg.RunID, err)
 		}
 
 		// Update metadata
