@@ -381,8 +381,8 @@ export default function Ranking() {
         const SPACING = 8; // Gap between bubbles
         const DAMPING = 0.85; // Velocity damping
         const COLLISION_STRENGTH = 0.5; // How strongly bubbles push apart
-        const ATTRACTION_STRENGTH = 0.02; // How strongly bubbles attract to center
-        const CENTER_PULL = 0.005; // Pull toward container center
+        const ATTRACTION_STRENGTH = 0.01; // How strongly bubbles attract to center
+        const CENTER_PULL = 0.0025; // Pull toward container center
 
         const simulatePhysics = () => {
             setBubbles(prevBubbles => {
@@ -486,23 +486,27 @@ export default function Ranking() {
                     bubble.vx *= DAMPING;
                     bubble.vy *= DAMPING;
 
-                    // Boundary constraints
-                    const padding = 10;
+                    // Stop tiny velocities
+                    if (Math.abs(bubble.vx) < 0.1) bubble.vx = 0;
+                    if (Math.abs(bubble.vy) < 0.1) bubble.vy = 0;
+
+                    // Boundary constraints - just stop, no bounce
+                    const padding = 20;
                     if (bubble.x < padding) {
                         bubble.x = padding;
-                        bubble.vx = Math.abs(bubble.vx) * 0.5;
+                        bubble.vx = 0;
                     }
                     if (bubble.x > width - bubble.size - padding) {
                         bubble.x = width - bubble.size - padding;
-                        bubble.vx = -Math.abs(bubble.vx) * 0.5;
+                        bubble.vx = 0;
                     }
                     if (bubble.y < padding) {
                         bubble.y = padding;
-                        bubble.vy = Math.abs(bubble.vy) * 0.5;
+                        bubble.vy = 0;
                     }
                     if (bubble.y > height - bubble.size - padding) {
                         bubble.y = height - bubble.size - padding;
-                        bubble.vy = -Math.abs(bubble.vy) * 0.5;
+                        bubble.vy = 0;
                     }
                 }
 
@@ -516,14 +520,58 @@ export default function Ranking() {
         return () => clearInterval(intervalId);
     }, [bubbles.length]);
 
-    // Handle drag in real-time - update position and trigger collision
+    // Handle drag in real-time - update position and push other bubbles
     const handleDrag = useCallback((id: string, newX: number, newY: number) => {
-        setBubbles(prev => prev.map(b => {
-            if (b.id === id) {
-                return { ...b, x: newX, y: newY };
+        setBubbles(prev => {
+            const newBubbles = prev.map(b => ({ ...b }));
+            const draggedIndex = newBubbles.findIndex(b => b.id === id);
+            if (draggedIndex === -1) return prev;
+
+            // Update dragged bubble position
+            newBubbles[draggedIndex].x = newX;
+            newBubbles[draggedIndex].y = newY;
+
+            const dragged = newBubbles[draggedIndex];
+            const SPACING = 12;
+
+            // Check collision with all other bubbles and push them
+            for (let i = 0; i < newBubbles.length; i++) {
+                if (i === draggedIndex) continue;
+
+                const other = newBubbles[i];
+
+                // Calculate centers
+                const c1x = dragged.x + dragged.size / 2;
+                const c1y = dragged.y + dragged.size / 2;
+                const c2x = other.x + other.size / 2;
+                const c2y = other.y + other.size / 2;
+
+                // Distance between centers
+                const dx = c2x - c1x;
+                const dy = c2y - c1y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Minimum distance (sum of radii + spacing)
+                const minDistance = (dragged.size + other.size) / 2 + SPACING;
+
+                if (distance < minDistance && distance > 0) {
+                    // Push the other bubble away
+                    const overlap = minDistance - distance;
+                    const normalX = dx / distance;
+                    const normalY = dy / distance;
+
+                    // Move other bubble away completely
+                    newBubbles[i].x += normalX * overlap * 1.2;
+                    newBubbles[i].y += normalY * overlap * 1.2;
+
+                    // Add some velocity for smooth follow-through
+                    newBubbles[i].vx += normalX * overlap * 0.5;
+                    newBubbles[i].vy += normalY * overlap * 0.5;
+                }
             }
-            return b;
-        }));
+
+            return newBubbles;
+        });
     }, []);
 
     const handleDragEnd = useCallback((id: string, info: PanInfo) => {
