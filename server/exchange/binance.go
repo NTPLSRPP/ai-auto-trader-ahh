@@ -516,7 +516,7 @@ func (c *BinanceClient) roundToStepSize(symbol string, quantity float64) float64
 }
 
 // PlaceOrder places a new order
-func (c *BinanceClient) PlaceOrder(ctx context.Context, symbol, side, orderType string, quantity float64, price float64) (*Order, error) {
+func (c *BinanceClient) PlaceOrder(ctx context.Context, symbol, side, orderType string, quantity float64, price float64, reduceOnly bool) (*Order, error) {
 	params := url.Values{}
 	params.Set("symbol", symbol)
 	params.Set("side", side)      // BUY or SELL
@@ -536,7 +536,11 @@ func (c *BinanceClient) PlaceOrder(ctx context.Context, symbol, side, orderType 
 		params.Set("timeInForce", "GTC")
 	}
 
-	log.Printf("[Binance] Placing %s %s order: %s %s @ %s", orderType, side, symbol, qtyStr, "MARKET")
+	if reduceOnly {
+		params.Set("reduceOnly", "true")
+	}
+
+	log.Printf("[Binance] Placing %s %s order: %s %s @ %s (reduceOnly=%v)", orderType, side, symbol, qtyStr, "MARKET", reduceOnly)
 
 	body, err := c.doRequest(ctx, "POST", "/fapi/v1/order", params, true)
 	if err != nil {
@@ -565,7 +569,7 @@ func (c *BinanceClient) ClosePosition(ctx context.Context, symbol string, positi
 	// Round quantity to step size
 	quantity = c.roundToStepSize(symbol, quantity)
 
-	return c.PlaceOrder(ctx, symbol, side, "MARKET", quantity, 0)
+	return c.PlaceOrder(ctx, symbol, side, "MARKET", quantity, 0, true)
 }
 
 // CancelAllOrders cancels all open orders for a symbol
@@ -753,9 +757,9 @@ type Trade struct {
 	ID              int64   `json:"id"`
 	Symbol          string  `json:"symbol"`
 	OrderID         int64   `json:"orderId"`
-	Side            string  `json:"side"`            // BUY or SELL
-	Price           float64 `json:"price,string"`    // Execution price
-	Qty             float64 `json:"qty,string"`      // Executed quantity
+	Side            string  `json:"side"`         // BUY or SELL
+	Price           float64 `json:"price,string"` // Execution price
+	Qty             float64 `json:"qty,string"`   // Executed quantity
 	RealizedPnL     float64 `json:"realizedPnl,string"`
 	QuoteQty        float64 `json:"quoteQty,string"` // Executed value in USDT
 	Commission      float64 `json:"commission,string"`

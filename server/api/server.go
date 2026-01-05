@@ -13,6 +13,7 @@ import (
 	"auto-trader-ahh/config"
 	"auto-trader-ahh/debate"
 	"auto-trader-ahh/decision"
+	"auto-trader-ahh/events"
 	"auto-trader-ahh/exchange"
 	"auto-trader-ahh/mcp"
 	"auto-trader-ahh/store"
@@ -34,6 +35,7 @@ type Server struct {
 	binanceClient   *exchange.BinanceClient
 	accessPasskey   string
 	cfg             *config.Config
+	hub             *events.Hub
 }
 
 func NewServer(port string, em *trader.EngineManager, cfg *config.Config) *Server {
@@ -67,6 +69,7 @@ func NewServer(port string, em *trader.EngineManager, cfg *config.Config) *Serve
 		binanceClient:   binanceClient,
 		accessPasskey:   cfg.AccessPasskey,
 		cfg:             cfg,
+		hub:             em.GetHub(),
 	}
 
 	// Wire up debate engine with market context provider and trade executor
@@ -82,6 +85,7 @@ func (s *Server) Start() error {
 	// Public endpoints (no auth required)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/auth/verify", s.handleAuthVerify)
+	mux.HandleFunc("/api/events", s.hub.ServeHTTP) // SSE endpoint
 
 	// Protected endpoints (auth required)
 	// Strategy endpoints
@@ -1105,7 +1109,7 @@ func (s *Server) executeDebateDecisions(session *debate.Session, decisions []*de
 			continue
 		}
 
-		order, err := binanceClient.PlaceOrder(ctx, d.Symbol, side, "MARKET", quantity, 0)
+		order, err := binanceClient.PlaceOrder(ctx, d.Symbol, side, "MARKET", quantity, 0, false)
 		if err != nil {
 			log.Printf("[Debate] Failed to execute %s on %s: %v", d.Action, d.Symbol, err)
 			d.Error = err.Error()

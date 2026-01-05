@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Use relative path in production (nginx will proxy to server)
 // Use localhost in development
-const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:8080/api';
+export const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:8080/api';
 
 // Storage key for access passkey
 const ACCESS_KEY_STORAGE = 'trader_access_key';
@@ -12,6 +12,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 300000, // 5 minutes
 });
 
 // Add access key to all requests if available

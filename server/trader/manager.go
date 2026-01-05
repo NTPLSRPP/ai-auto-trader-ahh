@@ -8,6 +8,7 @@ import (
 
 	"auto-trader-ahh/ai"
 	"auto-trader-ahh/config"
+	"auto-trader-ahh/events"
 	"auto-trader-ahh/exchange"
 	"auto-trader-ahh/store"
 )
@@ -18,15 +19,17 @@ type EngineManager struct {
 	engines       map[string]*Engine
 	traderStore   *store.TraderStore
 	strategyStore *store.StrategyStore
+	hub           *events.Hub
 	mu            sync.RWMutex
 }
 
-func NewEngineManager(cfg *config.Config) *EngineManager {
+func NewEngineManager(cfg *config.Config, hub *events.Hub) *EngineManager {
 	return &EngineManager{
 		cfg:           cfg,
 		engines:       make(map[string]*Engine),
 		traderStore:   store.NewTraderStore(),
 		strategyStore: store.NewStrategyStore(),
+		hub:           hub,
 	}
 }
 
@@ -84,7 +87,7 @@ func (m *EngineManager) Start(traderID string) error {
 	binanceClient := exchange.NewBinanceClient(binanceKey, binanceSecret, testnet)
 
 	// Create engine
-	engine := NewEngine(traderID, trader.Name, aiClient, binanceClient, strategy, &trader.Config, m.cfg)
+	engine := NewEngine(traderID, trader.Name, aiClient, binanceClient, strategy, &trader.Config, m.cfg, m.hub)
 
 	// Start engine
 	ctx := context.Background()
@@ -184,4 +187,9 @@ func (m *EngineManager) GetRunningTraders() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// GetHub returns the event hub
+func (m *EngineManager) GetHub() *events.Hub {
+	return m.hub
 }

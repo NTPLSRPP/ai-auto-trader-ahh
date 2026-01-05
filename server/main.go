@@ -9,6 +9,7 @@ import (
 
 	"auto-trader-ahh/api"
 	"auto-trader-ahh/config"
+	"auto-trader-ahh/events"
 	"auto-trader-ahh/store"
 	"auto-trader-ahh/trader"
 )
@@ -42,8 +43,12 @@ func main() {
 	}
 	defer store.Close()
 
+	// Create event hub
+	hub := events.NewHub()
+	go hub.Run()
+
 	// Create engine manager
-	engineManager := trader.NewEngineManager(cfg)
+	engineManager := trader.NewEngineManager(cfg, hub)
 
 	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)

@@ -11,11 +11,17 @@ import (
 	"auto-trader-ahh/ai"
 	"auto-trader-ahh/config"
 	"auto-trader-ahh/decision"
+	"auto-trader-ahh/events"
 	"auto-trader-ahh/exchange"
 	"auto-trader-ahh/market"
 	"auto-trader-ahh/mcp"
 	"auto-trader-ahh/store"
 )
+
+// Notifier interfaces for broadcasting events
+type Notifier interface {
+	Broadcast(evt events.Event)
+}
 
 type Engine struct {
 	id           string
@@ -26,6 +32,7 @@ type Engine struct {
 	aiClient     *ai.Client          // Legacy AI client (for backward compatibility)
 	binance      *exchange.BinanceClient
 	dataProvider *market.DataProvider
+	notifier     Notifier
 
 	// Decision Engine (NOFX-style XML parsing with CoT)
 	mcpClient      mcp.AIClient
@@ -91,7 +98,7 @@ type TradeLog struct {
 }
 
 // NewEngine creates a new trading engine with strategy support
-func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceClient, strategy *store.Strategy, traderCfg *store.TraderConfig, cfg *config.Config) *Engine {
+func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceClient, strategy *store.Strategy, traderCfg *store.TraderConfig, cfg *config.Config, notifier Notifier) *Engine {
 	dataProvider := market.NewDataProvider(binance)
 
 	// Create MCP client from config (uses OpenRouter by default)
@@ -144,6 +151,7 @@ func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceCl
 		// Initialize daily tracking
 		lastResetTime:  time.Now(),
 		initialBalance: 0,
+		notifier:       notifier,
 	}
 }
 
@@ -387,7 +395,7 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 	// Add account info
 	e.mu.RLock()
 	if e.account != nil {
-		formattedData += fmt.Sprintf("\n--- Account Info ---\n")
+		formattedData += "\n--- Account Info ---\n"
 		formattedData += fmt.Sprintf("Total Equity: $%.2f\n", e.account.TotalMarginBalance)
 		formattedData += fmt.Sprintf("Available Balance: $%.2f\n", e.account.AvailableBalance)
 		formattedData += fmt.Sprintf("Unrealized PnL: $%.2f\n", e.account.TotalUnrealizedProfit)
@@ -398,7 +406,7 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 	e.mu.RUnlock()
 
 	if hasPosition {
-		formattedData += fmt.Sprintf("\n--- Current Position ---\n")
+		formattedData += "\n--- Current Position ---\n"
 		formattedData += fmt.Sprintf("Side: %s\n", map[bool]string{true: "LONG", false: "SHORT"}[pos.PositionAmt > 0])
 		formattedData += fmt.Sprintf("Size: %.4f\n", pos.PositionAmt)
 		formattedData += fmt.Sprintf("Entry Price: $%.2f\n", pos.EntryPrice)
@@ -424,6 +432,15 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 
 	if err != nil {
 		tradeLog.Error = fmt.Sprintf("AI decision failed: %v", err)
+		if e.notifier != nil {
+			e.notifier.Broadcast(events.Event{
+				Type:      events.TypeError,
+				TraderID:  e.id,
+				Symbol:    symbol,
+				Message:   tradeLog.Error,
+				Timestamp: time.Now().UnixMilli(),
+			})
+		}
 		return tradeLog
 	}
 
@@ -441,6 +458,15 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 		realizedPnL, err := e.executeTrade(ctx, symbol, decision, hasPosition, pos)
 		if err != nil {
 			tradeLog.Error = fmt.Sprintf("trade execution failed: %v", err)
+			if e.notifier != nil {
+				e.notifier.Broadcast(events.Event{
+					Type:      events.TypeError,
+					TraderID:  e.id,
+					Symbol:    symbol,
+					Message:   tradeLog.Error,
+					Timestamp: time.Now().UnixMilli(),
+				})
+			}
 		} else if realizedPnL != 0 {
 			tradeLog.RealizedPnL = realizedPnL
 		}
@@ -539,7 +565,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
-		if _, err := e.binance.PlaceOrder(ctx, symbol, "BUY", "MARKET", quantity, 0); err != nil {
+		if _, err := e.binance.PlaceOrder(ctx, symbol, "BUY", "MARKET", quantity, 0, false); err != nil {
 			return 0, fmt.Errorf("failed to open long: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "LONG")
@@ -573,7 +599,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
-		if _, err := e.binance.PlaceOrder(ctx, symbol, "SELL", "MARKET", quantity, 0); err != nil {
+		if _, err := e.binance.PlaceOrder(ctx, symbol, "SELL", "MARKET", quantity, 0, false); err != nil {
 			return 0, fmt.Errorf("failed to open short: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "SHORT")

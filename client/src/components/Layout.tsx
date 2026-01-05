@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard,
   Settings,
@@ -18,6 +17,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dock, DockIcon, DockSeparator } from '@/components/ui/dock';
+
+import { useAuth } from '../contexts/AuthContext';
+import { API_BASE } from '@/lib/api';
+import { toast } from 'sonner';
 
 // All navigation items
 const navItems = [
@@ -41,6 +44,35 @@ export default function Layout() {
   const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const { logout, authRequired } = useAuth();
+
+  // Listen for server events (SSE)
+  useEffect(() => {
+    const eventSource = new EventSource(`${API_BASE}/events`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'error') {
+          toast.error(data.trader_id ? `Trader Alert: ${data.trader_id}` : 'System Alert', {
+            description: data.message,
+            duration: 8000,
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse event', e);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      // Optional: retry logic or silent fail. EventSource auto-retries.
+      // console.error('SSE Error:', err);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
 
   const SidebarContent = () => (
     <>
