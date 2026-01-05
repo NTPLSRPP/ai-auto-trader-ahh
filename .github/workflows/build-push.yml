@@ -79,6 +79,11 @@ jobs:
           echo "VERSION=${NEW_VERSION}" >> $GITHUB_OUTPUT
           echo "SKIP=false" >> $GITHUB_OUTPUT
 
+      - name: Lowercase Registry Owner
+        if: steps.version.outputs.SKIP != 'true'
+        run: |
+          echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       - name: Skip if no version bump
         if: steps.version.outputs.SKIP == 'true'
         run: |
@@ -118,8 +123,8 @@ jobs:
           tags: |
             ${{ env.SERVER_IMAGE }}:${{ steps.version.outputs.VERSION }}
             ${{ env.SERVER_IMAGE }}:latest
-            ghcr.io/${{ github.repository_owner }}/trader-ahh-server:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/trader-ahh-server:latest
+            ghcr.io/${{ env.REPO_OWNER }}/trader-ahh-server:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ env.REPO_OWNER }}/trader-ahh-server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -133,8 +138,8 @@ jobs:
           tags: |
             ${{ env.CLIENT_IMAGE }}:${{ steps.version.outputs.VERSION }}
             ${{ env.CLIENT_IMAGE }}:latest
-            ghcr.io/${{ github.repository_owner }}/trader-ahh-client:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/trader-ahh-client:latest
+            ghcr.io/${{ env.REPO_OWNER }}/trader-ahh-client:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ env.REPO_OWNER }}/trader-ahh-client:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -156,8 +161,8 @@ jobs:
           echo "- \`${{ env.CLIENT_IMAGE }}:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### GitHub Packages (GHCR)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`ghcr.io/${{ github.repository_owner }}/trader-ahh-server:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`ghcr.io/${{ github.repository_owner }}/trader-ahh-client:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ env.REPO_OWNER }}/trader-ahh-server:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ env.REPO_OWNER }}/trader-ahh-client:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Git Tag Created" >> $GITHUB_STEP_SUMMARY
           echo "- \`v${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
