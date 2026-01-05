@@ -129,58 +129,61 @@ function DraggableBubble({
             <div
                 className={`
                     rounded-full flex flex-col items-center justify-center
-                    transition-all duration-300 relative overflow-hidden
+                    transition-all duration-300 relative
                     ${isSelected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-transparent' : ''}
                 `}
                 style={{
-                    width: bubble.size,
-                    height: bubble.size,
-                    minWidth: bubble.size,
-                    minHeight: bubble.size,
-                    aspectRatio: '1 / 1',
-                    background: `radial-gradient(circle at 30% 30%, ${bubble.color}40, ${bubble.color}80)`,
+                    width: `${bubble.size}px`,
+                    height: `${bubble.size}px`,
+                    minWidth: `${bubble.size}px`,
+                    minHeight: `${bubble.size}px`,
+                    borderRadius: '50%',
+                    backgroundColor: bubble.color,
                     boxShadow: `
-                        0 0 ${bubble.size / 3}px ${bubble.color}30,
-                        inset 0 0 ${bubble.size / 4}px ${bubble.color}20,
-                        0 4px 20px rgba(0,0,0,0.3)
+                        0 0 ${bubble.size / 2}px ${bubble.color},
+                        0 4px 20px rgba(0,0,0,0.4)
                     `,
                 }}
             >
                 {/* Shine effect */}
                 <div
-                    className="absolute top-[15%] left-[20%] w-[30%] h-[20%] rounded-full opacity-40"
+                    className="absolute rounded-full"
                     style={{
-                        background: 'linear-gradient(135deg, rgba(255,255,255,0.6), transparent)',
+                        top: '10%',
+                        left: '15%',
+                        width: '35%',
+                        height: '25%',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.4), transparent)',
+                        borderRadius: '50%',
                     }}
                 />
 
                 {/* Content - with text overflow protection */}
                 <span
-                    className="font-bold text-white drop-shadow-lg text-center leading-tight truncate px-1"
+                    className="font-bold text-white drop-shadow-lg text-center leading-tight"
                     style={{
-                        fontSize: Math.max(bubble.size / 6, 10),
-                        maxWidth: bubble.size * 0.8,
+                        fontSize: `${Math.max(bubble.size / 5, 12)}px`,
+                        textShadow: '0 2px 4px rgba(0,0,0,0.5)',
                     }}
                 >
                     {displaySymbol}
                 </span>
                 <span
-                    className={`font-mono font-medium drop-shadow text-center truncate ${bubble.pnl >= 0 ? 'text-green-100' : 'text-red-100'}`}
+                    className="font-mono font-medium drop-shadow text-center text-white/90"
                     style={{
-                        fontSize: Math.max(bubble.size / 8, 8),
-                        maxWidth: bubble.size * 0.8,
+                        fontSize: `${Math.max(bubble.size / 7, 9)}px`,
+                        textShadow: '0 1px 3px rgba(0,0,0,0.5)',
                     }}
                 >
                     ${bubble.pnl.toFixed(2)}
                 </span>
 
                 {/* Trade count badge */}
-                {bubble.size > 80 && (
+                {bubble.size > 90 && (
                     <span
-                        className="text-white/70 mt-0.5 text-center truncate"
+                        className="text-white/70 mt-0.5 text-center"
                         style={{
-                            fontSize: Math.max(bubble.size / 10, 7),
-                            maxWidth: bubble.size * 0.8,
+                            fontSize: `${Math.max(bubble.size / 9, 8)}px`,
                         }}
                     >
                         {bubble.tradeCount} trades
