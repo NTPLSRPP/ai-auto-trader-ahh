@@ -98,10 +98,8 @@ auto-trader-ahh/
     ```
     Edit `.env` and add your keys:
     ```env
-    OPENROUTER_API_KEY=your_key_here
-    BINANCE_API_KEY=your_binance_key
-    BINANCE_SECRET_KEY=your_binance_secret
-    BINANCE_TESTNET=true
+    API_PORT=your_port_here
+    ACCESS_PASSKEY=your_key_here (recommend for security)
     ```
 
 3.  **Run with Docker Compose**:
@@ -136,11 +134,6 @@ The system is highly configurable via the Dashboard "Settings" page or `server/.
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
-| `OPENROUTER_API_KEY` | Key for AI Model access | Required |
-| `OPENROUTER_MODEL` | Specific model to use | `deepseek/deepseek-chat` |
-| `BINANCE_API_KEY` | Binance Futures API Key | Required |
-| `BINANCE_SECRET_KEY`| Binance Futures Secret | Required |
-| `BINANCE_TESTNET` | Use Binance Testnet | `true` |
 | `API_PORT` | Port for the Go server | `8080` |
 | `ACCESS_PASSKEY` | Application password for login | Optional |
 
