@@ -90,5 +90,9 @@ export const startDebate = (sessionId: string) => api.post(`/debate/sessions/${s
 export const stopDebate = (sessionId: string) => api.post(`/debate/sessions/${sessionId}/stop`);
 export const deleteDebate = (sessionId: string) => api.delete(`/debate/sessions/${sessionId}`);
 
+// Settings API
+export const getSettings = () => api.get('/settings');
+export const updateSettings = (data: any) => api.put('/settings', data);
+
 export default api;
 

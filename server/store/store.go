@@ -117,5 +117,10 @@ func migrate() error {
 		return fmt.Errorf("trade store init failed: %w", err)
 	}
 
+	settingsStore := NewSettingsStore()
+	if err := settingsStore.InitTables(); err != nil {
+		return fmt.Errorf("settings store init failed: %w", err)
+	}
+
 	return nil
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { getTraders, getStrategies, createTrader, updateTrader, deleteTrader } from '../lib/api';
+import { getTraders, getStrategies, createTrader, updateTrader, deleteTrader, getSettings, updateSettings } from '../lib/api';
 import type { Trader, Strategy } from '../types';
-import { Plus, Pencil, Trash2, Save, Eye, EyeOff, Settings, RefreshCw, Zap, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, Eye, EyeOff, Settings, RefreshCw, Zap, AlertTriangle, Key, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,14 @@ import { GlowBadge } from '@/components/ui/glow-badge';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal';
 
+interface GlobalSettings {
+  openrouter_api_key: string;
+  openrouter_model: string;
+  binance_api_key: string;
+  binance_secret_key: string;
+  binance_testnet: boolean;
+}
+
 export default function Config() {
   const [traders, setTraders] = useState<Trader[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -22,6 +30,15 @@ export default function Config() {
   const [editingTrader, setEditingTrader] = useState<Partial<Trader> | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
+    openrouter_api_key: '',
+    openrouter_model: 'deepseek/deepseek-v3.2',
+    binance_api_key: '',
+    binance_secret_key: '',
+    binance_testnet: true,
+  });
+  const [settingsConfigured, setSettingsConfigured] = useState({ openrouter: false, binance: false });
+  const [savingSettings, setSavingSettings] = useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
   const { alert, AlertDialog } = useAlert();
 
@@ -42,16 +59,44 @@ export default function Config() {
 
   const loadData = async () => {
     try {
-      const [tradersRes, strategiesRes] = await Promise.all([
+      const [tradersRes, strategiesRes, settingsRes] = await Promise.all([
         getTraders(),
         getStrategies(),
+        getSettings(),
       ]);
       setTraders(tradersRes.data.traders || []);
       setStrategies(strategiesRes.data.strategies || []);
+      if (settingsRes.data.settings) {
+        setGlobalSettings(settingsRes.data.settings);
+      }
+      if (settingsRes.data.configured) {
+        setSettingsConfigured(settingsRes.data.configured);
+      }
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await updateSettings(globalSettings);
+      await loadData(); // Reload to get masked values
+      alert({
+        title: 'Settings Saved',
+        description: 'Global settings have been saved successfully.',
+        variant: 'success',
+      });
+    } catch (err: any) {
+      alert({
+        title: 'Error',
+        description: err.response?.data?.error || 'Failed to save settings',
+        variant: 'danger',
+      });
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -212,6 +257,160 @@ export default function Config() {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Global Settings */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <Globe className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">Global Settings</h3>
+              <p className="text-sm text-muted-foreground">Configure API keys for OpenRouter and default Binance credentials</p>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* OpenRouter Settings */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-blue-400">
+                <Key className="w-4 h-4" />
+                OpenRouter AI
+                {settingsConfigured.openrouter && (
+                  <GlowBadge variant="success" className="ml-2">Configured</GlowBadge>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <div className="relative">
+                  <Input
+                    type={showSecrets['global_openrouter'] ? 'text' : 'password'}
+                    value={globalSettings.openrouter_api_key}
+                    onChange={(e) => setGlobalSettings({ ...globalSettings, openrouter_api_key: e.target.value })}
+                    className="glass pr-10"
+                    placeholder="sk-or-..."
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => toggleShowSecret('global_openrouter')}
+                  >
+                    {showSecrets['global_openrouter'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Default Model</Label>
+                <Select
+                  value={globalSettings.openrouter_model}
+                  onValueChange={(v) => setGlobalSettings({ ...globalSettings, openrouter_model: v })}
+                >
+                  <SelectTrigger className="glass">
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                    <SelectItem value="openai/gpt-oss-120b">GPT-OSS-120B</SelectItem>
+                    <SelectItem value="x-ai/grok-4.1-fast">Grok 4.1 Fast</SelectItem>
+                    <SelectItem value="deepseek/deepseek-v3.2">DeepSeek V3.2</SelectItem>
+                    <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
+                    <SelectItem value="openai/gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
+                    <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Default Binance Settings */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
+                <Key className="w-4 h-4" />
+                Default Binance (for Debate)
+                {settingsConfigured.binance && (
+                  <GlowBadge variant="success" className="ml-2">Configured</GlowBadge>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <div className="relative">
+                  <Input
+                    type={showSecrets['global_binance_key'] ? 'text' : 'password'}
+                    value={globalSettings.binance_api_key}
+                    onChange={(e) => setGlobalSettings({ ...globalSettings, binance_api_key: e.target.value })}
+                    className="glass pr-10"
+                    placeholder="Binance API Key"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => toggleShowSecret('global_binance_key')}
+                  >
+                    {showSecrets['global_binance_key'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Secret Key</Label>
+                <div className="relative">
+                  <Input
+                    type={showSecrets['global_binance_secret'] ? 'text' : 'password'}
+                    value={globalSettings.binance_secret_key}
+                    onChange={(e) => setGlobalSettings({ ...globalSettings, binance_secret_key: e.target.value })}
+                    className="glass pr-10"
+                    placeholder="Binance Secret Key"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => toggleShowSecret('global_binance_secret')}
+                  >
+                    {showSecrets['global_binance_secret'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={globalSettings.binance_testnet}
+                  onCheckedChange={(v) => setGlobalSettings({ ...globalSettings, binance_testnet: !!v })}
+                />
+                <Label className="cursor-pointer">Use Testnet</Label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end mt-6">
+            <Button onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Settings
+                </>
+              )}
+            </Button>
+          </div>
+        </GlassCard>
+      </motion.div>
 
       {/* Trader List */}
       <div className="grid gap-4">
@@ -523,10 +722,6 @@ export default function Config() {
                   </div>
                 </div>
               </GlassCard>
-
-              <p className="text-sm text-muted-foreground">
-                Note: OpenRouter API key is configured via environment variable (OPENROUTER_API_KEY).
-              </p>
 
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => { setEditingTrader(null); setIsCreating(false); }}>

@@ -26,12 +26,14 @@ type Server struct {
 	decisionStore   *store.DecisionStore
 	equityStore     *store.EquityStore
 	tradeStore      *store.TradeStore
+	settingsStore   *store.SettingsStore
 	engineManager   *trader.EngineManager
 	debateEngine    *debate.Engine
 	backtestManager *backtest.Manager
 	aiClient        mcp.AIClient
 	binanceClient   *exchange.BinanceClient
 	accessPasskey   string
+	cfg             *config.Config
 }
 
 func NewServer(port string, em *trader.EngineManager, cfg *config.Config) *Server {
@@ -57,12 +59,14 @@ func NewServer(port string, em *trader.EngineManager, cfg *config.Config) *Serve
 		decisionStore:   store.NewDecisionStore(),
 		equityStore:     equityStore,
 		tradeStore:      store.NewTradeStore(),
+		settingsStore:   store.NewSettingsStore(),
 		engineManager:   em,
 		debateEngine:    debateEng,
 		backtestManager: backtest.NewManager(aiClient, binanceClient),
 		aiClient:        aiClient,
 		binanceClient:   binanceClient,
 		accessPasskey:   cfg.AccessPasskey,
+		cfg:             cfg,
 	}
 
 	// Wire up debate engine with market context provider and trade executor
@@ -106,6 +110,9 @@ func (s *Server) Start() error {
 	// Debate endpoints
 	mux.HandleFunc("/api/debate/sessions", s.authMiddleware(s.handleDebateSessions))
 	mux.HandleFunc("/api/debate/sessions/", s.authMiddleware(s.handleDebateSession))
+
+	// Settings endpoints
+	mux.HandleFunc("/api/settings", s.authMiddleware(s.handleSettings))
 
 	// Wrap with CORS middleware
 	handler := corsMiddleware(mux)
@@ -1153,4 +1160,111 @@ func (s *Server) executeDebateDecisions(session *debate.Session, decisions []*de
 	}
 
 	return nil
+}
+
+// ============ SETTINGS ENDPOINTS ============
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		settings, err := s.settingsStore.GetGlobalSettings()
+		if err != nil {
+			s.errorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		// Include whether settings are configured (for UI to know if setup is needed)
+		response := map[string]interface{}{
+			"settings": settings,
+			"configured": map[string]bool{
+				"openrouter": settings.OpenRouterAPIKey != "" || s.cfg.OpenRouterAPIKey != "",
+				"binance":    settings.BinanceAPIKey != "" || s.cfg.BinanceAPIKey != "",
+			},
+		}
+		s.jsonResponse(w, response)
+
+	case "PUT":
+		var req store.GlobalSettings
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.errorResponse(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+
+		// Get existing settings to preserve masked values
+		existing, _ := s.settingsStore.GetGlobalSettings()
+
+		// Only update non-masked values (if masked value sent, keep existing)
+		if isMasked(req.OpenRouterAPIKey) {
+			req.OpenRouterAPIKey = existing.OpenRouterAPIKey
+		}
+		if isMasked(req.BinanceAPIKey) {
+			req.BinanceAPIKey = existing.BinanceAPIKey
+		}
+		if isMasked(req.BinanceSecretKey) {
+			req.BinanceSecretKey = existing.BinanceSecretKey
+		}
+
+		if err := s.settingsStore.SaveGlobalSettings(&req); err != nil {
+			s.errorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		// Reload config to apply new settings
+		s.reloadConfig()
+
+		s.jsonResponse(w, map[string]string{"status": "saved"})
+
+	default:
+		s.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
+}
+
+// isMasked checks if a string contains masked characters
+func isMasked(s string) bool {
+	return len(s) > 0 && (s == "****" || (len(s) > 8 && s[4:8] == "****"))
+}
+
+// reloadConfig reloads the AI client and Binance client with new settings
+func (s *Server) reloadConfig() {
+	settings, err := s.settingsStore.GetGlobalSettings()
+	if err != nil {
+		log.Printf("Failed to reload settings: %v", err)
+		return
+	}
+
+	// Use DB settings if available, otherwise fall back to .env
+	apiKey := settings.OpenRouterAPIKey
+	if apiKey == "" {
+		apiKey = s.cfg.OpenRouterAPIKey
+	}
+	model := settings.OpenRouterModel
+	if model == "" {
+		model = s.cfg.OpenRouterModel
+	}
+
+	// Update AI client
+	s.aiClient = mcp.NewOpenRouterClient(apiKey, model)
+	s.debateEngine.RegisterClient("openrouter", s.aiClient)
+	s.debateEngine.RegisterClient("openai", s.aiClient)
+	s.debateEngine.RegisterClient("anthropic", s.aiClient)
+	s.debateEngine.RegisterClient("deepseek", s.aiClient)
+
+	// Update Binance client
+	binanceKey := settings.BinanceAPIKey
+	if binanceKey == "" {
+		binanceKey = s.cfg.BinanceAPIKey
+	}
+	binanceSecret := settings.BinanceSecretKey
+	if binanceSecret == "" {
+		binanceSecret = s.cfg.BinanceSecretKey
+	}
+	testnet := settings.BinanceTestnet
+	if settings.BinanceAPIKey == "" {
+		testnet = s.cfg.BinanceTestnet
+	}
+
+	s.binanceClient = exchange.NewBinanceClient(binanceKey, binanceSecret, testnet)
+	s.backtestManager = backtest.NewManager(s.aiClient, s.binanceClient)
+
+	log.Printf("Config reloaded: OpenRouter model=%s, Binance testnet=%v", model, testnet)
 }
