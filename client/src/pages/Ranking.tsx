@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { motion, useMotionValue, useSpring, useTransform, type PanInfo } from 'framer-motion';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import {
     Trophy,
     Medal,
@@ -89,25 +89,18 @@ const SYMBOL_COLORS = [
     '#A3E4D7', // Pale Turquoise
 ];
 
-// Physics simulation component for each bubble
-function DraggableBubble({
+// Bubble component (no dragging)
+function Bubble({
     bubble,
-    onDrag,
-    onDragEnd,
-    containerRef,
     selectedBubble,
     setSelectedBubble,
 }: {
     bubble: Bubble;
-    onDrag: (id: string, x: number, y: number) => void;
-    onDragEnd: (id: string, info: PanInfo) => void;
-    containerRef: React.RefObject<HTMLDivElement | null>;
     selectedBubble: string | null;
     setSelectedBubble: (id: string | null) => void;
 }) {
     const x = useMotionValue(bubble.x);
     const y = useMotionValue(bubble.y);
-    const dragStartPos = useRef({ x: 0, y: 0 });
 
     const springConfig = { damping: 20, stiffness: 300 };
     const springX = useSpring(x, springConfig);
@@ -128,7 +121,7 @@ function DraggableBubble({
 
     return (
         <motion.div
-            className="absolute cursor-grab active:cursor-grabbing"
+            className="absolute cursor-pointer"
             style={{
                 x: springX,
                 y: springY,
@@ -136,21 +129,6 @@ function DraggableBubble({
                 width: bubble.size,
                 height: bubble.size,
             }}
-            drag
-            dragMomentum={false}
-            dragElastic={0}
-            dragConstraints={containerRef}
-            onDragStart={() => {
-                // Capture the position when drag starts
-                dragStartPos.current = { x: bubble.x, y: bubble.y };
-            }}
-            onDrag={(_, info) => {
-                // Use the captured start position + offset (not the constantly updating bubble.x/y)
-                const newX = dragStartPos.current.x + info.offset.x;
-                const newY = dragStartPos.current.y + info.offset.y;
-                onDrag(bubble.id, newX, newY);
-            }}
-            onDragEnd={(_, info) => onDragEnd(bubble.id, info)}
             onClick={() => setSelectedBubble(isSelected ? null : bubble.id)}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -161,7 +139,6 @@ function DraggableBubble({
                 delay: Math.random() * 0.5
             }}
             whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
         >
             <div
                 className={`
@@ -522,32 +499,6 @@ export default function Ranking() {
         return () => clearInterval(intervalId);
     }, [bubbles.length]);
 
-    // Handle drag in real-time - update position and trigger collision
-    const handleDrag = useCallback((id: string, newX: number, newY: number) => {
-        setBubbles(prev => prev.map(b => {
-            if (b.id === id) {
-                return { ...b, x: newX, y: newY };
-            }
-            return b;
-        }));
-    }, []);
-
-    const handleDragEnd = useCallback((id: string, info: PanInfo) => {
-        // Apply velocity for momentum effect and trigger collision response
-        setBubbles(prev => prev.map(b => {
-            if (b.id === id) {
-                return {
-                    ...b,
-                    x: b.x + info.offset.x,
-                    y: b.y + info.offset.y,
-                    vx: info.velocity.x * 0.3,
-                    vy: info.velocity.y * 0.3,
-                };
-            }
-            return b;
-        }));
-    }, []);
-
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen">
@@ -704,12 +655,9 @@ export default function Ranking() {
                         </div>
                     ) : (
                         bubbles.map(bubble => (
-                            <DraggableBubble
+                            <Bubble
                                 key={bubble.id}
                                 bubble={bubble}
-                                onDrag={handleDrag}
-                                onDragEnd={handleDragEnd}
-                                containerRef={containerRef}
                                 selectedBubble={selectedBubble}
                                 setSelectedBubble={setSelectedBubble}
                             />
