@@ -769,7 +769,8 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 
 		minProfitToClose := 1.0 // Minimum 1% profit to allow manual close (lowered from 3% to catch small moves)
-		if pnlPct < minProfitToClose {
+		// Only block small POSITIVE profits. Allow cutting losses (negative PnL).
+		if pnlPct >= 0 && pnlPct < minProfitToClose {
 			log.Printf("[%s][%s] BLOCKED: AI tried to close %s position at only %.2f%% profit ($%.2f). Let TP order run to target.",
 				e.name, symbol, side, pnlPct, currentPos.UnrealizedProfit)
 			return 0, fmt.Errorf("blocked: profit %.2f%% below %.2f%% threshold, let TP order reach target", pnlPct, minProfitToClose)
