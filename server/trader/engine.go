@@ -544,6 +544,17 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		e.setPositionFirstSeen(symbol, "LONG")
 
+		// Update positions map immediately to enforce max positions correctly
+		e.mu.Lock()
+		e.positions[symbol] = &exchange.Position{
+			Symbol:      symbol,
+			PositionAmt: quantity,
+			EntryPrice:  ticker.Price,
+			MarkPrice:   ticker.Price,
+			Leverage:    leverage,
+		}
+		e.mu.Unlock()
+
 		// Place bracket orders (SL/TP) on exchange
 		slPct, tpPct := e.getSLTPPercentages(decision)
 		if slPct > 0 && tpPct > 0 {
@@ -566,6 +577,17 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			return 0, fmt.Errorf("failed to open short: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "SHORT")
+
+		// Update positions map immediately to enforce max positions correctly
+		e.mu.Lock()
+		e.positions[symbol] = &exchange.Position{
+			Symbol:      symbol,
+			PositionAmt: -quantity, // Negative for short
+			EntryPrice:  ticker.Price,
+			MarkPrice:   ticker.Price,
+			Leverage:    leverage,
+		}
+		e.mu.Unlock()
 
 		// Place bracket orders (SL/TP) on exchange
 		slPct, tpPct := e.getSLTPPercentages(decision)
