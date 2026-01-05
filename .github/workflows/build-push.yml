@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required to push tags
+      packages: write  # Required to push to GHCR
 
     steps:
       - name: Checkout repository
@@ -36,9 +37,9 @@ jobs:
           # Get latest tag or default to 1.4.6
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.4.6")
           LATEST_VERSION=${LATEST_TAG#v}
-
+          
           echo "Latest version: ${LATEST_VERSION}"
-
+          
           # If manual override provided, use it
           if [ -n "${{ github.event.inputs.version_override }}" ]; then
             NEW_VERSION="${{ github.event.inputs.version_override }}"
@@ -46,11 +47,11 @@ jobs:
           else
             # Parse current version
             IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST_VERSION}"
-
+            
             # Get commit message
             COMMIT_MSG=$(git log -1 --pretty=%B)
             echo "Commit message: ${COMMIT_MSG}"
-
+            
             # Determine bump type from commit message prefix
             if echo "${COMMIT_MSG}" | grep -iqE "^major(\(.+\))?:"; then
               MAJOR=$((MAJOR + 1))
@@ -69,11 +70,11 @@ jobs:
               echo "SKIP=true" >> $GITHUB_OUTPUT
               exit 0
             fi
-
+            
             NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
             echo "Bump type: ${BUMP_TYPE}"
           fi
-
+          
           echo "New version: ${NEW_VERSION}"
           echo "VERSION=${NEW_VERSION}" >> $GITHUB_OUTPUT
           echo "SKIP=false" >> $GITHUB_OUTPUT
@@ -99,6 +100,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        if: steps.version.outputs.SKIP != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push Server image
         if: steps.version.outputs.SKIP != 'true'
         uses: docker/build-push-action@v6
@@ -109,6 +118,8 @@ jobs:
           tags: |
             ${{ env.SERVER_IMAGE }}:${{ steps.version.outputs.VERSION }}
             ${{ env.SERVER_IMAGE }}:latest
+            ghcr.io/${{ github.repository_owner }}/trader-ahh-server:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/trader-ahh-server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -122,6 +133,8 @@ jobs:
           tags: |
             ${{ env.CLIENT_IMAGE }}:${{ steps.version.outputs.VERSION }}
             ${{ env.CLIENT_IMAGE }}:latest
+            ghcr.io/${{ github.repository_owner }}/trader-ahh-client:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/trader-ahh-client:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -138,9 +151,13 @@ jobs:
         run: |
           echo "## 🚀 Release v${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Docker Images Pushed" >> $GITHUB_STEP_SUMMARY
+          echo "### DockerHub Images" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.SERVER_IMAGE }}:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.CLIENT_IMAGE }}:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### GitHub Packages (GHCR)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ github.repository_owner }}/trader-ahh-server:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ github.repository_owner }}/trader-ahh-client:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Git Tag Created" >> $GITHUB_STEP_SUMMARY
           echo "- \`v${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
