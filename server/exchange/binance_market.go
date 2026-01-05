@@ -45,6 +45,31 @@ func (c *BinanceClient) Get24hTicker(ctx context.Context) ([]Ticker24h, error) {
 	return tickers, nil
 }
 
+// GetTickerStats returns 24h stats for a single symbol
+func (c *BinanceClient) GetTickerStats(ctx context.Context, symbol string) (*Ticker24h, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/fapi/v1/ticker/24hr?symbol="+symbol, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error (status %d)", resp.StatusCode)
+	}
+
+	var ticker Ticker24h
+	if err := json.NewDecoder(resp.Body).Decode(&ticker); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &ticker, nil
+}
+
 // GetTopVolumeCoins returns top N coins by 24h Quote Volume (USDT)
 // Filters out stablecoins and non-USDT pairs
 func (c *BinanceClient) GetTopVolumeCoins(ctx context.Context, limit int) ([]string, error) {

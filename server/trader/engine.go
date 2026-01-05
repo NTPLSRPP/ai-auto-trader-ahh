@@ -447,6 +447,13 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 		return tradeLog
 	}
 
+	// Fetch BTC Global Context
+	btcStats, err := e.binance.GetTickerStats(ctx, "BTCUSDT")
+	if err == nil {
+		marketData.BTCPrice = btcStats.LastPrice
+		marketData.BTCChange24h = btcStats.PriceChange
+	}
+
 	// Format data for AI
 	formattedData := e.dataProvider.FormatForAI(marketData)
 	tradeLog.MarketData = formattedData

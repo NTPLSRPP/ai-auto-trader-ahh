@@ -10,19 +10,21 @@ import (
 )
 
 type MarketData struct {
-	Symbol        string
-	CurrentPrice  float64
-	Klines        []exchange.Kline
-	EMA9          float64
-	EMA21         float64
-	RSI           float64
-	MACD          float64
-	MACDSignal    float64
-	MACDHist      float64
-	ATR           float64
-	Volume24h     float64
+	Symbol         string
+	CurrentPrice   float64
+	Klines         []exchange.Kline
+	EMA9           float64
+	EMA21          float64
+	RSI            float64
+	MACD           float64
+	MACDSignal     float64
+	MACDHist       float64
+	ATR            float64
+	Volume24h      float64
 	PriceChange24h float64
-	Trend         string // BULLISH, BEARISH, NEUTRAL
+	Trend          string // BULLISH, BEARISH, NEUTRAL
+	BTCPrice       float64
+	BTCChange24h   float64
 }
 
 type DataProvider struct {
@@ -121,6 +123,12 @@ func (d *DataProvider) FormatForAI(data *MarketData) string {
 	sb.WriteString(fmt.Sprintf("Current Price: $%.2f\n", data.CurrentPrice))
 	sb.WriteString(fmt.Sprintf("24h Price Change: %.2f%%\n", data.PriceChange24h))
 	sb.WriteString(fmt.Sprintf("24h Volume: $%.2f\n\n", data.Volume24h))
+
+	if data.BTCPrice > 0 {
+		sb.WriteString("--- Global Market Context (BTC) ---\n")
+		sb.WriteString(fmt.Sprintf("BTC Price: $%.2f\n", data.BTCPrice))
+		sb.WriteString(fmt.Sprintf("BTC 24h Change: %.2f%%\n\n", data.BTCChange24h))
+	}
 
 	sb.WriteString("--- Technical Indicators ---\n")
 	sb.WriteString(fmt.Sprintf("EMA 9: $%.2f\n", data.EMA9))
