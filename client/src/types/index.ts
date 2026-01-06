@@ -54,6 +54,8 @@ export interface RiskControlConfig {
   min_position_usd: number;
   min_confidence: number;
   min_risk_reward_ratio: number;
+  enable_emergency_shutdown?: boolean;
+  emergency_min_balance?: number;
 }
 
 export interface Trader {

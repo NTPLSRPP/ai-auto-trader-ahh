@@ -783,6 +783,56 @@ export default function Strategies() {
                       />
                     </div>
                   </div>
+
+                  {/* Emergency Shutdown */}
+                  <div className="pt-4 border-t border-white/10 mt-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-red-400" />
+                      <h4 className="font-medium text-sm text-red-400">Emergency Procedures</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <label className="flex items-center gap-3 p-3 rounded-lg bg-red-400/5 border border-red-400/20 cursor-pointer hover:bg-red-400/10 transition-colors">
+                        <Checkbox
+                          checked={editingStrategy.config.risk_control.enable_emergency_shutdown ?? true}
+                          onCheckedChange={(c) => setEditingStrategy({
+                            ...editingStrategy,
+                            config: {
+                              ...editingStrategy.config,
+                              risk_control: {
+                                ...editingStrategy.config.risk_control,
+                                enable_emergency_shutdown: !!c
+                              }
+                            }
+                          })}
+                          className="data-[state=checked]:bg-red-400 data-[state=checked]:border-red-400"
+                        />
+                        <div>
+                          <span className="font-medium text-red-300">Emergency Shutdown</span>
+                          <p className="text-xs text-muted-foreground">Stop trading if balance critical</p>
+                        </div>
+                      </label>
+
+                      <div className="space-y-2">
+                        <Label>Min Balance Limit ($)</Label>
+                        <Input
+                          type="number"
+                          value={editingStrategy.config.risk_control.emergency_min_balance ?? 60}
+                          onChange={(e) => setEditingStrategy({
+                            ...editingStrategy,
+                            config: {
+                              ...editingStrategy.config,
+                              risk_control: {
+                                ...editingStrategy.config.risk_control,
+                                emergency_min_balance: parseFloat(e.target.value)
+                              }
+                            }
+                          })}
+                          className="glass border-red-400/20 focus:border-red-400/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CollapsibleSection>
 
