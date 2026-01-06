@@ -782,6 +782,59 @@ export default function Strategies() {
                         className="glass"
                       />
                     </div>
+
+                    <div className="space-y-2">
+                      <Label>Max Daily Loss %</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={editingStrategy.config.risk_control.max_daily_loss_pct ?? 5}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, max_daily_loss_pct: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className="glass"
+                        placeholder="Default: 5"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Stop Trading (mins)</Label>
+                      <Input
+                        type="number"
+                        value={editingStrategy.config.risk_control.stop_trading_mins ?? 60}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, stop_trading_mins: parseInt(e.target.value) }
+                          }
+                        })}
+                        className="glass"
+                        placeholder="Default: 60"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Max Drawdown %</Label>
+                      <Input
+                        type="number"
+                        step="1"
+                        value={editingStrategy.config.risk_control.max_drawdown_pct ?? 40}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, max_drawdown_pct: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className="glass"
+                        placeholder="Default: 40"
+                      />
+                    </div>
                   </div>
 
                   {/* Emergency Shutdown */}
