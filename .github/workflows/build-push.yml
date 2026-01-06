@@ -62,11 +62,11 @@ jobs:
               MINOR=$((MINOR + 1))
               PATCH=0
               BUMP_TYPE="minor"
-            elif echo "${COMMIT_MSG}" | grep -iqE "^fix(\(.+\))?:"; then
+            elif echo "${COMMIT_MSG}" | grep -iqE "^(fix|refactor|style|perf|chore)(\(.+\))?:"; then
               PATCH=$((PATCH + 1))
               BUMP_TYPE="patch"
             else
-              echo "No version bump prefix found (fix:/feat:/major:). Skipping build."
+              echo "No version bump prefix found (fix/feat/major/refactor/style/perf/chore). Skipping build."
               echo "SKIP=true" >> $GITHUB_OUTPUT
               exit 0
             fi
