@@ -673,6 +673,12 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		// Auto-Reverse: Close SHORT before opening LONG
 		if hasPosition && currentPos.PositionAmt < 0 {
+			// SAFETY: Don't allow reversal if current position is at loss
+			if currentPos.UnrealizedProfit < 0 {
+				log.Printf("[%s][%s] BLOCKED REVERSAL: Cannot flip to LONG because SHORT is at loss ($%.2f)",
+					e.name, symbol, currentPos.UnrealizedProfit)
+				return 0, fmt.Errorf("blocked reversal: refusing to close losing position (PnL: $%.2f)", currentPos.UnrealizedProfit)
+			}
 			log.Printf("[%s][%s] Reversing position! Closing SHORT to open LONG...", e.name, symbol)
 			// Close the short position
 			// Amt is negative, so negate it to get positive quantity
@@ -718,6 +724,12 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		// Auto-Reverse: Close LONG before opening SHORT
 		if hasPosition && currentPos.PositionAmt > 0 {
+			// SAFETY: Don't allow reversal if current position is at loss
+			if currentPos.UnrealizedProfit < 0 {
+				log.Printf("[%s][%s] BLOCKED REVERSAL: Cannot flip to SHORT because LONG is at loss ($%.2f)",
+					e.name, symbol, currentPos.UnrealizedProfit)
+				return 0, fmt.Errorf("blocked reversal: refusing to close losing position (PnL: $%.2f)", currentPos.UnrealizedProfit)
+			}
 			log.Printf("[%s][%s] Reversing position! Closing LONG to open SHORT...", e.name, symbol)
 			// Close the long position
 			closeQty := currentPos.PositionAmt
@@ -765,14 +777,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			side = "SHORT"
 		}
 
-		// SAFETY CHECK: Warn when closing positions at a loss, but allow it (modified to match nofx behavior)
-		if currentPos.UnrealizedProfit < 0 {
-			log.Printf("[%s][%s] WARNING: AI closing %s position at loss ($%.2f). This is allowed now to preserve capital.",
-				e.name, symbol, side, currentPos.UnrealizedProfit)
-		}
-
-		// SAFETY CHECK 2: Don't close positions with less than 3% profit
-		// Let them run to the take-profit target (6%) instead of taking tiny profits
+		// Calculate PnL percentage
 		var pnlPct float64
 		if currentPos.EntryPrice > 0 {
 			if currentPos.PositionAmt > 0 { // Long position
@@ -782,11 +787,19 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			}
 		}
 
-		minProfitToClose := 1.0 // Minimum 1% profit to allow manual close (lowered from 3% to catch small moves)
-		// Only block small POSITIVE profits. Allow cutting losses (negative PnL).
+		// MIDDLE GROUND: Prevent Churn
+		// 1. Block Closing on Noise (-0.5% to 0%)
+		if pnlPct < 0 && pnlPct > -0.5 {
+			log.Printf("[%s][%s] BLOCKED: AI tried to close on noise (PnL: %.2f%%). Holding for real move.",
+				e.name, symbol, pnlPct)
+			return 0, fmt.Errorf("blocked: refusing to close small loss (noise), wait for reversal or stop")
+		}
+
+		// 2. Block Closing on Small Profit (0% to 3%)
+		minProfitToClose := 3.0
 		if pnlPct >= 0 && pnlPct < minProfitToClose {
-			log.Printf("[%s][%s] BLOCKED: AI tried to close %s position at only %.2f%% profit ($%.2f). Let TP order run to target.",
-				e.name, symbol, side, pnlPct, currentPos.UnrealizedProfit)
+			log.Printf("[%s][%s] BLOCKED: AI tried to close %s position at only %.2f%% profit. Let TP order run to target.",
+				e.name, symbol, side, pnlPct)
 			return 0, fmt.Errorf("blocked: profit %.2f%% below %.2f%% threshold, let TP order reach target", pnlPct, minProfitToClose)
 		}
 
