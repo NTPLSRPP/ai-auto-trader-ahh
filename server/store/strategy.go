@@ -175,9 +175,9 @@ func DefaultStrategyConfig() StrategyConfig {
 			MinRiskRewardRatio: 3.0, // Minimum 3:1 reward/risk
 
 			// Daily loss and drawdown
-			MaxDailyLossPct: 5.0,  // Stop trading after 5% daily loss
+			MaxDailyLossPct: 15.0, // Stop trading after 15% daily loss (better for high leverage)
 			MaxDrawdownPct:  40.0, // Max drawdown threshold
-			StopTradingMins: 60,   // Pause 60 mins after trigger
+			StopTradingMins: 30,   // Pause 30 mins after trigger
 
 			// Drawdown monitoring
 			DrawdownCloseThreshold: 40.0, // Close at 40% drawdown from peak

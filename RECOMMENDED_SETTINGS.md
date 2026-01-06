@@ -1,25 +1,4 @@
 # Recommended Settings for $250 Account
-
-## Current Settings Analysis
-
-### Your Current Settings (VERY AGGRESSIVE ⚠️):
-- **Max Positions**: 3
-- **Max Leverage**: 20x 🔥
-- **Min Confidence**: 70%
-- **Max Position %**: 30%
-- **Min Risk/Reward**: 1.5
-- **Timeframe**: 3 minutes
-- **Trading Interval**: 3 minutes
-- **Turbo Mode**: ✅ AGGRESSIVE (HIGH VOLATILITY) 💀
-
-### Risk Calculation:
-- Position size: $75 (30%)
-- With 20x leverage: **$1,500 controlled**
-- 2% loss = **-$30** (-12% of wallet!)
-- 3 positions = **-36% wallet risk!** 💀
-
----
-
 ## 🎯 Option 1: CONSERVATIVE (Recommended for $250)
 
 **Goal**: Grow account steadily, minimize risk of blowing up
@@ -128,6 +107,13 @@
 **Change to**: 10-15 minutes
 
 **Why**: With 3-minute interval, you'll get 480 decisions per day! This causes over-trading. 15 minutes = 96 decisions/day (more manageable).
+
+### 5. INCREASE DAILY LOSS LIMIT TO 15% 🛡️
+**Current**: 5%  
+**Change to**: 15%
+
+**Why**: With 20x leverage, a 5% daily swing is normal. A 5% limit will pause your bot constantly. 15% gives it room to breathe while still preventing catastrophe.
+**Stop Trading Mins**: Change to 15-30 minutes (from 60).
 
 ---
 
