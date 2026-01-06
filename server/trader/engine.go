@@ -773,30 +773,38 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			}
 		}
 
-		// SMART LOSS MANAGEMENT: Middle Ground Approach
-		// 1. ALLOW cutting significant losses (below -1.5%) - "cut before it gets worse"
-		// 2. BLOCK closing on noise/small movements (-1.5% to +3%)
-		// 3. ALLOW taking good profits (above +3%)
+		// SMART LOSS MANAGEMENT V2: Tighter thresholds + Confidence Override
+		// 1. ALLOW cutting losses early (-0.5% price drop = -10% equity at 20x)
+		// 2. BLOCK noise (-0.5% to +1.5%) UNLESS confidence is high (>80%)
+		// 3. ALLOW taking profits early (>1.5% price rise = +30% equity at 20x)
 
 		const (
-			allowCutLossThreshold = -1.5 // Can close if loss exceeds 1.5%
-			blockNoiseFloorPct    = -1.5 // Cannot close between -1.5% and 3%
-			minProfitToClose      = 3.0  // Minimum 3% profit to close
+			allowCutLossThreshold   = -0.5 // Can close if loss exceeds 0.5%
+			blockNoiseFloorPct      = -0.5 // Noise floor
+			minProfitToClose        = 1.5  // Minimum 1.5% profit to close
+			highConfidenceThreshold = 80.0 // Override noise block if confidence > 80%
 		)
 
-		// Case 1: Significant loss - ALLOW close (cut before reaching -2% SL)
+		isHighConfidence := decision.Confidence >= highConfidenceThreshold
+
+		// Case 1: Significant loss - ALLOW
 		if pnlPct < allowCutLossThreshold {
 			log.Printf("[%s][%s] ✅ ALLOWING early exit: Loss is %.2f%% (threshold: %.2f%%). Cutting before SL hit.",
 				e.name, symbol, pnlPct, allowCutLossThreshold)
-			// Continue to close position below
+			// Continue to close...
+		} else if isHighConfidence {
+			// Case 1b: High Confidence Override - ALLOW
+			log.Printf("[%s][%s] ⚡ OVERRIDE: High confidence (%.1f%%) allows closing in noise zone (PnL: %.2f%%).",
+				e.name, symbol, decision.Confidence, pnlPct)
+			// Continue to close...
 		} else if pnlPct < minProfitToClose {
-			// Case 2: In the "noise zone" (-1.5% to +3%) - BLOCK to prevent churn
-			log.Printf("[%s][%s] ❌ BLOCKED: Cannot close in noise zone (PnL: %.2f%%). Must wait for %.2f%% profit or let SL/TP handle.",
-				e.name, symbol, pnlPct, minProfitToClose)
-			return 0, fmt.Errorf("blocked: PnL %.2f%% in noise zone (%.2f%% to +%.2f%%), wait for clear move",
-				pnlPct, blockNoiseFloorPct, minProfitToClose)
+			// Case 2: Noise Zone - BLOCK
+			log.Printf("[%s][%s] ❌ BLOCKED: Cannot close in noise zone (PnL: %.2f%%). Confidence %.1f%% too low for override.",
+				e.name, symbol, pnlPct, decision.Confidence)
+			return 0, fmt.Errorf("blocked: PnL %.2f%% in noise zone (need >%.1f%% profit OR >%.0f%% confidence)",
+				pnlPct, minProfitToClose, highConfidenceThreshold)
 		}
-		// Case 3: Good profit (>3%) - ALLOW close (implicit, continues below)
+		// Case 3: Good profit - ALLOW
 
 		// Capture realized PnL before closing
 		realizedPnL := currentPos.UnrealizedProfit
