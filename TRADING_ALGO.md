@@ -123,10 +123,14 @@ $$
     *   **BTC/ETH**: Max Leverage 20x, Max 30% of Equity per trade.
     *   **Altcoins**: Max Leverage 10x, Max 15% of Equity per trade.
 
-### C. PnL Protections
-To prevent panic-selling during volatility, the system explicitly **blocks** the AI from closing a position if:
-1.  **It is in a Loss**: `UnrealizedPnL < 0` (The internal logic assumes the Stop Loss order is the only valid exit for a loss).
-2.  **Profit is Tiny**: `UnrealizedPnLPct < 3.0%` (Prevents "paper hands" closing before the target is reached).
+### C. PnL Protections (Smart Loss Management V2)
+To prevent "death by a thousand cuts" in choppy markets while still allowing safe exits:
+
+1.  **Relaxed Cut-Loss**: The bot is **allowed** to cut a loss early ONLY if `PnL < -1.2%`.
+    *   *Why*: At 20x leverage, -1.2% price = -24% equity. We allow room for noise.
+2.  **Noise Filter**: Between **-1.2%** and **+1.0%** PnL, closing is **BLOCKED** to prevent panic selling in noise.
+3.  **Confidence Override**: If AI Confidence > **90%**, it can override the noise filter (rare).
+4.  **Profit Taking**: Can close early if `Profit > 1.0%`.
 
 ---
 
