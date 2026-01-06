@@ -671,27 +671,10 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			log.Printf("[%s][%s] Already in LONG position, skipping BUY", e.name, symbol)
 			return 0, fmt.Errorf("skipped: already in LONG position")
 		}
-		// Auto-Reverse: Close SHORT before opening LONG
+		// Require explicit close of opposite position (matching NOFX behavior)
 		if hasPosition && currentPos.PositionAmt < 0 {
-			// SAFETY: Don't allow reversal if current position is at loss
-			if currentPos.UnrealizedProfit < 0 {
-				log.Printf("[%s][%s] BLOCKED REVERSAL: Cannot flip to LONG because SHORT is at loss ($%.2f)",
-					e.name, symbol, currentPos.UnrealizedProfit)
-				return 0, fmt.Errorf("blocked reversal: refusing to close losing position (PnL: $%.2f)", currentPos.UnrealizedProfit)
-			}
-			log.Printf("[%s][%s] Reversing position! Closing SHORT to open LONG...", e.name, symbol)
-			// Close the short position
-			// Amt is negative, so negate it to get positive quantity
-			closeQty := -currentPos.PositionAmt
-			if _, err := e.binance.PlaceOrder(ctx, symbol, "BUY", "MARKET", closeQty, 0, true); err != nil {
-				return 0, fmt.Errorf("failed to close short for reversal: %w", err)
-			}
-			// Clear internal tracking
-			e.clearPositionTracking(symbol, "SHORT")
-			e.mu.Lock()
-			delete(e.positions, symbol)
-			e.mu.Unlock()
-			hasPosition = false
+			log.Printf("[%s][%s] Already has SHORT position, close it first before opening LONG", e.name, symbol)
+			return 0, fmt.Errorf("skipped: %s already has SHORT position, close it first", symbol)
 		}
 		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
@@ -722,26 +705,10 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			log.Printf("[%s][%s] Already in SHORT position, skipping SELL", e.name, symbol)
 			return 0, fmt.Errorf("skipped: already in SHORT position")
 		}
-		// Auto-Reverse: Close LONG before opening SHORT
+		// Require explicit close of opposite position (matching NOFX behavior)
 		if hasPosition && currentPos.PositionAmt > 0 {
-			// SAFETY: Don't allow reversal if current position is at loss
-			if currentPos.UnrealizedProfit < 0 {
-				log.Printf("[%s][%s] BLOCKED REVERSAL: Cannot flip to SHORT because LONG is at loss ($%.2f)",
-					e.name, symbol, currentPos.UnrealizedProfit)
-				return 0, fmt.Errorf("blocked reversal: refusing to close losing position (PnL: $%.2f)", currentPos.UnrealizedProfit)
-			}
-			log.Printf("[%s][%s] Reversing position! Closing LONG to open SHORT...", e.name, symbol)
-			// Close the long position
-			closeQty := currentPos.PositionAmt
-			if _, err := e.binance.PlaceOrder(ctx, symbol, "SELL", "MARKET", closeQty, 0, true); err != nil {
-				return 0, fmt.Errorf("failed to close long for reversal: %w", err)
-			}
-			// Clear internal tracking
-			e.clearPositionTracking(symbol, "LONG")
-			e.mu.Lock()
-			delete(e.positions, symbol)
-			e.mu.Unlock()
-			hasPosition = false
+			log.Printf("[%s][%s] Already has LONG position, close it first before opening SHORT", e.name, symbol)
+			return 0, fmt.Errorf("skipped: %s already has LONG position, close it first", symbol)
 		}
 		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
@@ -787,21 +754,30 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			}
 		}
 
-		// MIDDLE GROUND: Prevent Churn
-		// 1. Block Closing on Noise (-0.5% to 0%)
-		if pnlPct < 0 && pnlPct > -0.5 {
-			log.Printf("[%s][%s] BLOCKED: AI tried to close on noise (PnL: %.2f%%). Holding for real move.",
-				e.name, symbol, pnlPct)
-			return 0, fmt.Errorf("blocked: refusing to close small loss (noise), wait for reversal or stop")
-		}
+		// SMART LOSS MANAGEMENT: Middle Ground Approach
+		// 1. ALLOW cutting significant losses (below -1.5%) - "cut before it gets worse"
+		// 2. BLOCK closing on noise/small movements (-1.5% to +3%)
+		// 3. ALLOW taking good profits (above +3%)
 
-		// 2. Block Closing on Small Profit (0% to 3%)
-		minProfitToClose := 3.0
-		if pnlPct >= 0 && pnlPct < minProfitToClose {
-			log.Printf("[%s][%s] BLOCKED: AI tried to close %s position at only %.2f%% profit. Let TP order run to target.",
-				e.name, symbol, side, pnlPct)
-			return 0, fmt.Errorf("blocked: profit %.2f%% below %.2f%% threshold, let TP order reach target", pnlPct, minProfitToClose)
+		const (
+			allowCutLossThreshold = -1.5 // Can close if loss exceeds 1.5%
+			blockNoiseFloorPct    = -1.5 // Cannot close between -1.5% and 3%
+			minProfitToClose      = 3.0  // Minimum 3% profit to close
+		)
+
+		// Case 1: Significant loss - ALLOW close (cut before reaching -2% SL)
+		if pnlPct < allowCutLossThreshold {
+			log.Printf("[%s][%s] ✅ ALLOWING early exit: Loss is %.2f%% (threshold: %.2f%%). Cutting before SL hit.",
+				e.name, symbol, pnlPct, allowCutLossThreshold)
+			// Continue to close position below
+		} else if pnlPct < minProfitToClose {
+			// Case 2: In the "noise zone" (-1.5% to +3%) - BLOCK to prevent churn
+			log.Printf("[%s][%s] ❌ BLOCKED: Cannot close in noise zone (PnL: %.2f%%). Must wait for %.2f%% profit or let SL/TP handle.",
+				e.name, symbol, pnlPct, minProfitToClose)
+			return 0, fmt.Errorf("blocked: PnL %.2f%% in noise zone (%.2f%% to +%.2f%%), wait for clear move",
+				pnlPct, blockNoiseFloorPct, minProfitToClose)
 		}
+		// Case 3: Good profit (>3%) - ALLOW close (implicit, continues below)
 
 		// Capture realized PnL before closing
 		realizedPnL := currentPos.UnrealizedProfit
@@ -1477,16 +1453,10 @@ func (e *Engine) getSLTPPercentages(decision *ai.TradingDecision) (slPct, tpPct 
 		tpPct = 6.0 // Default 6% take profit (3:1 ratio)
 	}
 
-	// Ensure minimum risk-reward ratio from strategy
-	minRatio := 1.5
-	if e.strategy != nil && e.strategy.Config.RiskControl.MinRiskRewardRatio > 0 {
-		minRatio = e.strategy.Config.RiskControl.MinRiskRewardRatio
-	}
-
-	if tpPct < slPct*minRatio {
-		newTp := slPct * minRatio
-		log.Printf("[SL/TP] Adjusted TP to %.2f%% for %.1f:1 ratio (SL=%.1f%%, PrevTP=%.1f%%)", newTp, minRatio, slPct, tpPct)
-		tpPct = newTp
+	// Ensure minimum 2:1 ratio
+	if tpPct < slPct*2 {
+		tpPct = slPct * 3 // Force 3:1 ratio
+		log.Printf("[SL/TP] Adjusted TP to %.1f%% for 3:1 ratio (SL=%.1f%%)", tpPct, slPct)
 	}
 
 	return slPct, tpPct
