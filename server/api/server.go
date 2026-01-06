@@ -400,6 +400,11 @@ func (s *Server) handleRecommendPairs(w http.ResponseWriter, r *http.Request) {
 	for _, t := range tickers {
 		// Basic filter: USDT pairs, reasonable volume
 		if len(t.Symbol) > 4 && t.Symbol[len(t.Symbol)-4:] == "USDT" {
+			// Ensure symbol is actively trading (Futures)
+			if !s.binanceClient.IsActiveSymbol(t.Symbol) {
+				continue
+			}
+
 			// Skip stables
 			if t.Symbol == "USDCUSDT" || t.Symbol == "FDUSDUSDT" || t.Symbol == "TUSDUSDT" || t.Symbol == "USDPUSDT" {
 				continue

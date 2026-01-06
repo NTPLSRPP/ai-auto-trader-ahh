@@ -116,3 +116,11 @@ func (c *BinanceClient) GetTopVolumeCoins(ctx context.Context, limit int) ([]str
 
 	return result, nil
 }
+
+// IsActiveSymbol checks if a symbol is currently trading
+func (c *BinanceClient) IsActiveSymbol(symbol string) bool {
+	if info, ok := c.symbolInfo[symbol]; ok {
+		return info.Status == "TRADING"
+	}
+	return false
+}

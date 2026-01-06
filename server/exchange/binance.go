@@ -39,6 +39,7 @@ type SymbolInfo struct {
 	PricePrecision    int
 	MinQty            float64
 	StepSize          float64
+	Status            string
 }
 
 type AccountInfo struct {
@@ -133,6 +134,7 @@ func (c *BinanceClient) fetchExchangeInfo() {
 	var result struct {
 		Symbols []struct {
 			Symbol            string `json:"symbol"`
+			Status            string `json:"status"`
 			QuantityPrecision int    `json:"quantityPrecision"`
 			PricePrecision    int    `json:"pricePrecision"`
 			Filters           []struct {
@@ -151,6 +153,7 @@ func (c *BinanceClient) fetchExchangeInfo() {
 	for _, s := range result.Symbols {
 		info := &SymbolInfo{
 			Symbol:            s.Symbol,
+			Status:            s.Status,
 			QuantityPrecision: s.QuantityPrecision,
 			PricePrecision:    s.PricePrecision,
 		}
