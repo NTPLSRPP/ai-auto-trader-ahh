@@ -695,8 +695,8 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			log.Printf("[%s][%s] Already has SHORT position, close it first before opening LONG", e.name, symbol)
 			return 0, fmt.Errorf("skipped: %s already has SHORT position, close it first", symbol)
 		}
-		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
-			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
+		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (margin: $%.2f, position: $%.2f, leverage: %dx)",
+			e.name, symbol, quantity, ticker.Price, positionSizeUSD, actualPositionValue, leverage)
 		if _, err := e.binance.PlaceOrder(ctx, symbol, "BUY", "MARKET", quantity, 0, false); err != nil {
 			return 0, fmt.Errorf("failed to open long: %w", err)
 		}
@@ -729,8 +729,8 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			log.Printf("[%s][%s] Already has LONG position, close it first before opening SHORT", e.name, symbol)
 			return 0, fmt.Errorf("skipped: %s already has LONG position, close it first", symbol)
 		}
-		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (size: $%.2f, leverage: %dx)",
-			e.name, symbol, quantity, ticker.Price, positionSizeUSD, leverage)
+		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (margin: $%.2f, position: $%.2f, leverage: %dx)",
+			e.name, symbol, quantity, ticker.Price, positionSizeUSD, actualPositionValue, leverage)
 		if _, err := e.binance.PlaceOrder(ctx, symbol, "SELL", "MARKET", quantity, 0, false); err != nil {
 			return 0, fmt.Errorf("failed to open short: %w", err)
 		}
@@ -1472,7 +1472,7 @@ func (e *Engine) getSLTPPercentages(decision *ai.TradingDecision) (slPct, tpPct 
 		tpPct = 6.0 // Default 6% take profit (3:1 ratio)
 	}
 
-	// Ensure minimum 2:1 ratio
+	// Ensure minimum 3:1 ratio
 	if tpPct < slPct*2 {
 		tpPct = slPct * 3 // Force 3:1 ratio
 		log.Printf("[SL/TP] Adjusted TP to %.1f%% for 3:1 ratio (SL=%.1f%%)", tpPct, slPct)
