@@ -324,12 +324,12 @@ Trading Rules:
 - Higher volatility (ATR) = wider stops needed
 
 CRITICAL POSITION MANAGEMENT RULES:
-- You have authority to close positions at a loss if the setup is invalidated
-- You MAY close with small profit (<3%) if momentum stalls or reverses
-- Trust your analysis over the rigid TP/SL orders if market structure changes
-- If you see a Reversal Signal, recommend CLOSE immediately (even at loss) then OPEN opposite
-- Positions should be managed dynamically
-- If you just opened or closed a position, evaluate the new state freshly`
+- PREFER HOLDING: Market noise is normal. Do not close just because price fluctuates slightly against you.
+- ONLY recommend CLOSE if the detailed Trade Thesis is INVALIDATED by a confirmed Trend Reversal.
+- Do NOT close for "Capital Preservation" on small dips - trust your Stop Loss (SL) to handle risk.
+- Do NOT close for small 0.5% profits - trust your Take Profit (TP) to catch the move.
+- If the trend is still unclear or neutral, HOLD and give the trade room to breathe.
+- Stop over-trading: If you are unsure, HOLD. Only CLOSE if you are 90% sure the market has turned against you.`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
