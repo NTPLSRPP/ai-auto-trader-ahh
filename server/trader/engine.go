@@ -745,6 +745,12 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			quantity, minQuantity, symbol, positionSizeUSD)
 	}
 
+	// CRITICAL: Before opening any new position, cancel any orphaned SL/TP orders for this symbol
+	// This prevents the "-4130: An open stop or take profit order...is existing" error
+	if !hasPosition && (decision.Action == "BUY" || decision.Action == "SELL" || decision.Action == "open_long" || decision.Action == "open_short") {
+		e.cancelOrphanedOrders(ctx, symbol)
+	}
+
 	switch decision.Action {
 	case "BUY", "open_long":
 		if hasPosition && currentPos.PositionAmt > 0 {
@@ -1642,6 +1648,41 @@ func (e *Engine) placeBracketOrders(ctx context.Context, symbol string, isLong b
 
 	log.Printf("[%s][%s] Bracket orders placed: SL_ID=%d, TP_ID=%d",
 		e.name, symbol, slOrder.OrderID, tpOrder.OrderID)
+}
+
+// cancelOrphanedOrders cancels any orphaned SL/TP orders for a symbol before opening a new position
+// This prevents the "-4130: An open stop or take profit order...is existing" error
+func (e *Engine) cancelOrphanedOrders(ctx context.Context, symbol string) {
+	// First, cancel any tracked bracket orders
+	e.bracketOrdersMutex.Lock()
+	bracket, exists := e.bracketOrders[symbol]
+	if exists {
+		delete(e.bracketOrders, symbol)
+	}
+	e.bracketOrdersMutex.Unlock()
+
+	if exists {
+		log.Printf("[%s][%s] 🧹 Cleaning up tracked bracket orders before new position", e.name, symbol)
+		if bracket.StopLossOrderID > 0 {
+			if err := e.binance.CancelOrder(ctx, symbol, bracket.StopLossOrderID); err != nil {
+				// Ignore errors - order might already be filled/cancelled
+			}
+		}
+		if bracket.TakeProfitOrderID > 0 {
+			if err := e.binance.CancelOrder(ctx, symbol, bracket.TakeProfitOrderID); err != nil {
+				// Ignore errors
+			}
+		}
+	}
+
+	// ALSO cancel ALL open algo orders for this symbol from Binance directly
+	// This catches any orphaned orders that our tracking missed
+	if err := e.binance.CancelAllOrders(ctx, symbol); err != nil {
+		// This is expected to fail sometimes (no orders), ignore
+		log.Printf("[%s][%s] 🧹 Attempted to cancel all open orders: %v", e.name, symbol, err)
+	} else {
+		log.Printf("[%s][%s] 🧹 Cancelled all open orders for fresh start", e.name, symbol)
+	}
 }
 
 // cancelBracketOrders cancels any existing SL/TP orders for a symbol
