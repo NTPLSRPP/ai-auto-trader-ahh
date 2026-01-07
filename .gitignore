@@ -50,7 +50,8 @@ data/
 # Logs
 logs/
 *.log
-logs.txt
+logs.*
+log.*
 
 # OS files
 .DS_Store
