@@ -59,6 +59,17 @@ export interface RiskControlConfig {
   stop_trading_mins?: number;
   enable_emergency_shutdown?: boolean;
   emergency_min_balance?: number;
+  // Trailing Stop Loss
+  enable_trailing_stop?: boolean;
+  trailing_stop_activate_pct?: number;
+  trailing_stop_distance_pct?: number;
+  // Max Hold Duration
+  enable_max_hold_duration?: boolean;
+  max_hold_duration_mins?: number;
+  // Smart Loss Cut
+  enable_smart_loss_cut?: boolean;
+  smart_loss_cut_mins?: number;
+  smart_loss_cut_pct?: number;
 }
 
 export interface Trader {

@@ -1768,6 +1768,106 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			side = "SHORT"
 		}
 
+		holdDuration := e.GetHoldDuration(pos.Symbol, side)
+
+		// =====================================================================
+		// 1. TRAILING STOP LOSS - Lock in profits
+		// =====================================================================
+		if rc.EnableTrailingStop {
+			activatePct := rc.TrailingStopActivatePct
+			if activatePct <= 0 {
+				activatePct = 1.0
+			}
+			trailDistPct := rc.TrailingStopDistancePct
+			if trailDistPct <= 0 {
+				trailDistPct = 0.5
+			}
+
+			// Update and get peak P&L
+			e.UpdatePeakPnL(pos.Symbol, side, pnlPct)
+			peakPnL := e.GetPeakPnL(pos.Symbol, side)
+
+			// Check if trailing stop should activate
+			if peakPnL >= activatePct {
+				// Calculate trailing stop level
+				trailingStopLevel := peakPnL - trailDistPct
+
+				if pnlPct <= trailingStopLevel {
+					log.Printf("[%s][%s] 📉 TRAILING STOP TRIGGERED: Peak=%.2f%%, Current=%.2f%%, TrailStop=%.2f%%",
+						e.name, pos.Symbol, peakPnL, pnlPct, trailingStopLevel)
+
+					if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
+						log.Printf("[%s][%s] Failed to close position (trailing stop): %v", e.name, pos.Symbol, err)
+					} else {
+						log.Printf("[%s][%s] ✅ Closed position via trailing stop. Realized profit locked in.", e.name, pos.Symbol)
+						e.clearPositionTracking(pos.Symbol, side)
+						e.cancelBracketOrders(ctx, pos.Symbol)
+					}
+					continue // Move to next position
+				}
+			}
+		}
+
+		// =====================================================================
+		// 2. MAX HOLD DURATION - Force close positions held too long
+		// =====================================================================
+		if rc.EnableMaxHoldDuration {
+			maxHoldMins := rc.MaxHoldDurationMins
+			if maxHoldMins <= 0 {
+				maxHoldMins = 240 // Default 4 hours
+			}
+
+			maxHoldDuration := time.Duration(maxHoldMins) * time.Minute
+
+			if holdDuration >= maxHoldDuration {
+				log.Printf("[%s][%s] ⏰ MAX HOLD DURATION EXCEEDED: Held for %v (limit: %v). Force closing.",
+					e.name, pos.Symbol, holdDuration.Round(time.Minute), maxHoldDuration)
+
+				if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
+					log.Printf("[%s][%s] Failed to close position (max hold): %v", e.name, pos.Symbol, err)
+				} else {
+					log.Printf("[%s][%s] ✅ Closed position due to max hold duration. PnL: %.2f%%", e.name, pos.Symbol, pnlPct)
+					e.clearPositionTracking(pos.Symbol, side)
+					e.cancelBracketOrders(ctx, pos.Symbol)
+				}
+				continue // Move to next position
+			}
+		}
+
+		// =====================================================================
+		// 3. SMART LOSS CUT - Cut positions underwater too long
+		// =====================================================================
+		if rc.EnableSmartLossCut {
+			smartLossMins := rc.SmartLossCutMins
+			if smartLossMins <= 0 {
+				smartLossMins = 30 // Default 30 mins
+			}
+			smartLossPct := rc.SmartLossCutPct
+			if smartLossPct >= 0 {
+				smartLossPct = -1.0 // Default -1%
+			}
+
+			smartLossDuration := time.Duration(smartLossMins) * time.Minute
+
+			// Only trigger if both conditions are met: underwater AND held long enough
+			if pnlPct <= smartLossPct && holdDuration >= smartLossDuration {
+				log.Printf("[%s][%s] 🔪 SMART LOSS CUT: Position at %.2f%% (threshold: %.2f%%) for %v (threshold: %v). Cutting losses.",
+					e.name, pos.Symbol, pnlPct, smartLossPct, holdDuration.Round(time.Minute), smartLossDuration)
+
+				if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
+					log.Printf("[%s][%s] Failed to close position (smart loss cut): %v", e.name, pos.Symbol, err)
+				} else {
+					log.Printf("[%s][%s] ✅ Cut losing position. Loss: %.2f%%", e.name, pos.Symbol, pnlPct)
+					e.clearPositionTracking(pos.Symbol, side)
+					e.cancelBracketOrders(ctx, pos.Symbol)
+				}
+				continue // Move to next position
+			}
+		}
+
+		// =====================================================================
+		// 4. DRAWDOWN PROTECTION (Original logic)
+		// =====================================================================
 		// Update peak P&L
 		e.UpdatePeakPnL(pos.Symbol, side, pnlPct)
 		peakPnL := e.GetPeakPnL(pos.Symbol, side)
@@ -1793,6 +1893,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				log.Printf("[%s][%s] Failed to close position: %v", e.name, pos.Symbol, err)
 			} else {
 				e.clearPositionTracking(pos.Symbol, side)
+				e.cancelBracketOrders(ctx, pos.Symbol)
 			}
 		}
 	}

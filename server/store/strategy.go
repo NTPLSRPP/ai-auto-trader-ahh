@@ -125,6 +125,20 @@ type RiskControlConfig struct {
 	// SAFETY: Emergency Shutdown
 	EnableEmergencyShutdown bool    `json:"enable_emergency_shutdown"` // Stop trading if balance drops below limit
 	EmergencyMinBalance     float64 `json:"emergency_min_balance"`     // Minimum balance to keep trading (default: 60 USD)
+
+	// TRAILING STOP LOSS - Lock in profits as price moves in your favor
+	EnableTrailingStop      bool    `json:"enable_trailing_stop"`       // Enable trailing stop loss feature
+	TrailingStopActivatePct float64 `json:"trailing_stop_activate_pct"` // Profit % to activate trailing stop (default: 1.0 = 1%)
+	TrailingStopDistancePct float64 `json:"trailing_stop_distance_pct"` // Distance behind peak price (default: 0.5 = 0.5%)
+
+	// MAX HOLD DURATION - Force close positions held too long
+	EnableMaxHoldDuration bool `json:"enable_max_hold_duration"` // Enable max hold duration feature
+	MaxHoldDurationMins   int  `json:"max_hold_duration_mins"`   // Max minutes to hold a position (default: 240 = 4 hours)
+
+	// SMART LOSS CUT - Cut losses if position is down for extended time
+	EnableSmartLossCut bool    `json:"enable_smart_loss_cut"` // Enable time-based loss cutting
+	SmartLossCutMins   int     `json:"smart_loss_cut_mins"`   // Minutes before cutting losers (default: 30)
+	SmartLossCutPct    float64 `json:"smart_loss_cut_pct"`    // Loss % threshold for smart cut (default: -1.0 = -1%)
 }
 
 // DefaultStrategyConfig returns a sensible default strategy
@@ -186,6 +200,20 @@ func DefaultStrategyConfig() StrategyConfig {
 			// Emergency Shutdown
 			EnableEmergencyShutdown: true,
 			EmergencyMinBalance:     60.0,
+
+			// Trailing Stop Loss (disabled by default - opt-in)
+			EnableTrailingStop:      false,
+			TrailingStopActivatePct: 1.0, // Activate when profit reaches 1%
+			TrailingStopDistancePct: 0.5, // Trail 0.5% behind peak
+
+			// Max Hold Duration (disabled by default - opt-in)
+			EnableMaxHoldDuration: false,
+			MaxHoldDurationMins:   240, // 4 hours default
+
+			// Smart Loss Cut (disabled by default - opt-in)
+			EnableSmartLossCut: false,
+			SmartLossCutMins:   30,   // Cut if losing for 30 mins
+			SmartLossCutPct:    -1.0, // Only cut if loss > 1%
 		},
 		AI: AIConfig{
 			EnableReasoning: false,
