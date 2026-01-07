@@ -32,7 +32,7 @@ func main() {
 
 	// Validate configuration
 	if cfg.OpenRouterAPIKey == "" {
-		log.Fatal("OPENROUTER_API_KEY is required. Set it in .env file or environment.")
+		log.Printf("Warning: OPENROUTER_API_KEY not set in environment. Traders must provide their own keys.")
 	}
 
 	log.Printf("Configuration loaded:")

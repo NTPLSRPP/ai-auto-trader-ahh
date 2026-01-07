@@ -106,8 +106,21 @@ type TradeLog struct {
 func NewEngine(id, name string, aiClient *ai.Client, binance *exchange.BinanceClient, strategy *store.Strategy, traderCfg *store.TraderConfig, cfg *config.Config, notifier Notifier) *Engine {
 	dataProvider := market.NewDataProvider(binance)
 
+	// Determine API Key and Model (Trader config > Global config)
+	apiKey := cfg.OpenRouterAPIKey
+	model := cfg.OpenRouterModel
+
+	if traderCfg != nil {
+		if traderCfg.OpenRouterAPIKey != "" {
+			apiKey = traderCfg.OpenRouterAPIKey
+		}
+		if traderCfg.OpenRouterModel != "" {
+			model = traderCfg.OpenRouterModel
+		}
+	}
+
 	// Create MCP client from config (uses OpenRouter by default)
-	mcpClient := mcp.NewOpenRouterClient(cfg.OpenRouterAPIKey, cfg.OpenRouterModel)
+	mcpClient := mcp.NewOpenRouterClient(apiKey, model)
 
 	// Create decision engine with English language
 	decisionEngine := decision.NewEngine(mcpClient, decision.LangEnglish)
