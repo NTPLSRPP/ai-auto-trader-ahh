@@ -26,12 +26,14 @@
             "boll_period": 20,
             "macd_fast": 12,
             "macd_slow": 26,
-            "macd_signal": 9
+            "macd_signal": 9,
+            "enable_multi_tf": true,
+            "confirmation_timeframe": "15m"
         },
         "risk_control": {
             "max_positions": 2,
             "max_leverage": 10,
-            "min_confidence": 75,
+            "min_confidence": 85,
             "max_position_pct": 20,
             "min_position_usd": 50,
             "min_position_btc_eth": 60,
@@ -55,15 +57,15 @@
             "drawdown_close_threshold": 50
         },
         "ai": {
-            "enable_reasoning": true,
-            "reasoning_model": "deepseek/deepseek-v3.2"
+            "enable_reasoning": false,
+            "reasoning_model": ""
         },
         "custom_prompt": "Conservative trading: Only take high-quality setups. Trust SL/TP orders.",
         "trading_interval": 5,
         "turbo_mode": false,
         "simple_mode": true
     },
-    "exportedAt": "2026-01-07T18:00:00Z",
-    "version": "1.0",
-    "description": "Conservative settings based on v1.4.7 style. Lower leverage (10x), smaller positions (20%), Simple Mode enabled to disable trailing stop and smart loss cut."
+    "exportedAt": "2026-01-07T18:30:00Z",
+    "version": "1.1",
+    "description": "Conservative settings v1.1: Multi-TF confirmation (5m+15m), 85% min confidence, 10x leverage, Simple Mode enabled."
 }

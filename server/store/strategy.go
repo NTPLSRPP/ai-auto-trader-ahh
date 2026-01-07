@@ -84,6 +84,10 @@ type IndicatorConfig struct {
 	MACDFast   int   `json:"macd_fast"`   // e.g., 12
 	MACDSlow   int   `json:"macd_slow"`   // e.g., 26
 	MACDSignal int   `json:"macd_signal"` // e.g., 9
+
+	// Multi-Timeframe Confirmation
+	EnableMultiTF         bool   `json:"enable_multi_tf"`        // Check multiple timeframes before trading
+	ConfirmationTimeframe string `json:"confirmation_timeframe"` // Higher timeframe to confirm (e.g., "15m")
 }
 
 // RiskControlConfig defines risk management rules
@@ -169,6 +173,10 @@ func DefaultStrategyConfig() StrategyConfig {
 			MACDFast:         12,
 			MACDSlow:         26,
 			MACDSignal:       9,
+
+			// Multi-Timeframe Confirmation (enabled by default)
+			EnableMultiTF:         true,
+			ConfirmationTimeframe: "15m",
 		},
 		RiskControl: RiskControlConfig{
 			MaxPositions: 3,
@@ -190,7 +198,7 @@ func DefaultStrategyConfig() StrategyConfig {
 			MarginBuffer:   0.98, // Use 98% of max affordable
 
 			// AI thresholds
-			MinConfidence:                70,
+			MinConfidence:                85,   // Raised from 70: Only trade on high confidence signals
 			MinRiskRewardRatio:           3.0,  // Minimum 3:1 reward/risk
 			HighConfidenceCloseThreshold: 95.0, // Raised from 85: Require very high confidence to close in noise zone
 

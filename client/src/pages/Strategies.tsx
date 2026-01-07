@@ -735,6 +735,66 @@ export default function Strategies() {
                       </label>
                     ))}
                   </div>
+
+                  {/* Multi-Timeframe Confirmation */}
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10 mt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-blue-500/20">
+                          <Clock className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium">Multi-Timeframe Confirmation</h4>
+                          <p className="text-xs text-muted-foreground">Require higher timeframe to agree before trading</p>
+                        </div>
+                      </div>
+                      <Checkbox
+                        checked={editingStrategy.config.indicators?.enable_multi_tf ?? true}
+                        onCheckedChange={(checked) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            indicators: {
+                              ...editingStrategy.config.indicators,
+                              enable_multi_tf: checked as boolean
+                            }
+                          }
+                        })}
+                      />
+                    </div>
+
+                    {editingStrategy.config.indicators?.enable_multi_tf && (
+                      <div className="space-y-2 pt-3 border-t border-white/10">
+                        <Label className="text-sm">Confirmation Timeframe</Label>
+                        <Select
+                          value={editingStrategy.config.indicators?.confirmation_timeframe || '15m'}
+                          onValueChange={(v) => setEditingStrategy({
+                            ...editingStrategy,
+                            config: {
+                              ...editingStrategy.config,
+                              indicators: {
+                                ...editingStrategy.config.indicators,
+                                confirmation_timeframe: v
+                              }
+                            }
+                          })}
+                        >
+                          <SelectTrigger className="glass">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="15m">15 minutes</SelectItem>
+                            <SelectItem value="30m">30 minutes</SelectItem>
+                            <SelectItem value="1h">1 hour</SelectItem>
+                            <SelectItem value="4h">4 hours</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Trade only if both {editingStrategy.config.indicators?.primary_timeframe || '5m'} AND this timeframe agree on direction.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CollapsibleSection>
 
@@ -1233,66 +1293,6 @@ export default function Strategies() {
               {/* AI Settings */}
               <CollapsibleSection title="AI Settings" icon={Brain} isExpanded={expandedSections.aiPrompt} onToggle={() => toggleSection('aiPrompt')}>
                 <div className="space-y-4">
-                  {/* Reasoning Mode Toggle */}
-                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-purple-500/20">
-                          <Zap className="w-4 h-4 text-purple-400" />
-                        </div>
-                        <div>
-                          <h4 className="font-medium">Reasoning Mode</h4>
-                          <p className="text-xs text-muted-foreground">Enable chain-of-thought reasoning for smarter decisions (slower)</p>
-                        </div>
-                      </div>
-                      <Checkbox
-                        checked={editingStrategy.config.ai?.enable_reasoning ?? false}
-                        onCheckedChange={(checked) => setEditingStrategy({
-                          ...editingStrategy,
-                          config: {
-                            ...editingStrategy.config,
-                            ai: {
-                              ...editingStrategy.config.ai,
-                              enable_reasoning: checked as boolean
-                            }
-                          }
-                        })}
-                      />
-                    </div>
-
-                    {editingStrategy.config.ai?.enable_reasoning && (
-                      <div className="space-y-2 pt-3 border-t border-white/10">
-                        <Label>Reasoning Model</Label>
-                        <Select
-                          value={editingStrategy.config.ai?.reasoning_model || 'deepseek/deepseek-r1'}
-                          onValueChange={(v) => setEditingStrategy({
-                            ...editingStrategy,
-                            config: {
-                              ...editingStrategy.config,
-                              ai: {
-                                ...editingStrategy.config.ai,
-                                reasoning_model: v
-                              }
-                            }
-                          })}
-                        >
-                          <SelectTrigger className="glass">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="deepseek/deepseek-r1">DeepSeek R1</SelectItem>
-                            <SelectItem value="deepseek/deepseek-r1-0528">DeepSeek R1 (0528)</SelectItem>
-                            <SelectItem value="openai/o1">OpenAI o1</SelectItem>
-                            <SelectItem value="openai/o1-mini">OpenAI o1-mini</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Reasoning models think step-by-step before deciding. Expect 10-60s response times.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Custom Prompt */}
                   <div className="space-y-2">
                     <Label>Custom AI Prompt</Label>

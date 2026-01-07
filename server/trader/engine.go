@@ -563,6 +563,41 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 	// Execute trade if confidence is high enough
 	minConfidence := float64(e.getMinConfidence())
 	if decision.Confidence >= minConfidence {
+		// Multi-Timeframe Confirmation (only for new positions)
+		if !hasPosition && (decision.Action == "BUY" || decision.Action == "SELL") {
+			if e.strategy != nil && e.strategy.Config.Indicators.EnableMultiTF {
+				confirmTF := e.strategy.Config.Indicators.ConfirmationTimeframe
+				if confirmTF == "" {
+					confirmTF = "15m"
+				}
+
+				// Get higher timeframe data
+				htfData, err := e.dataProvider.GetMarketDataWithConfig(ctx, symbol, confirmTF, 50)
+				if err != nil {
+					log.Printf("[%s][%s] Failed to get %s data for MTF confirmation: %v", e.name, symbol, confirmTF, err)
+					// Continue without confirmation if we can't get data
+				} else {
+					// Check if higher timeframe agrees with trade direction
+					htfBullish := htfData.EMA9 > htfData.EMA21
+					wantLong := decision.Action == "BUY"
+
+					if (wantLong && !htfBullish) || (!wantLong && htfBullish) {
+						log.Printf("[%s][%s] ❌ BLOCKED: Multi-TF disagreement. 5m says %s but %s shows %s trend (EMA9: %.2f, EMA21: %.2f)",
+							e.name, symbol, decision.Action, confirmTF,
+							map[bool]string{true: "BULLISH", false: "BEARISH"}[htfBullish],
+							htfData.EMA9, htfData.EMA21)
+						tradeLog.Error = fmt.Sprintf("blocked: %s timeframe disagrees (%s vs %s)",
+							confirmTF,
+							map[bool]string{true: "BULLISH", false: "BEARISH"}[htfBullish],
+							decision.Action)
+						return tradeLog
+					}
+					log.Printf("[%s][%s] ✅ Multi-TF confirmed: Both 5m and %s agree on %s",
+						e.name, symbol, confirmTF, decision.Action)
+				}
+			}
+		}
+
 		realizedPnL, err := e.executeTrade(ctx, symbol, decision, hasPosition, pos)
 		if err != nil {
 			tradeLog.Error = fmt.Sprintf("trade execution failed: %v", err)

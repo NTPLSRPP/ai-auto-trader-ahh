@@ -45,6 +45,8 @@ export interface IndicatorConfig {
   macd_fast: number;
   macd_slow: number;
   macd_signal: number;
+  enable_multi_tf?: boolean;
+  confirmation_timeframe?: string;
 }
 
 export interface RiskControlConfig {
