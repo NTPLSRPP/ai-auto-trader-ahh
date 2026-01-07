@@ -764,7 +764,26 @@ export default function Strategies() {
                           }
                         })}
                         className="glass"
+                        placeholder="Altcoins min (e.g. 12)"
                       />
+                      <p className="text-xs text-muted-foreground">For altcoins</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Min Position BTC/ETH</Label>
+                      <Input
+                        type="number"
+                        value={editingStrategy.config.risk_control.min_position_size_btc_eth ?? 60}
+                        onChange={(e) => setEditingStrategy({
+                          ...editingStrategy,
+                          config: {
+                            ...editingStrategy.config,
+                            risk_control: { ...editingStrategy.config.risk_control, min_position_size_btc_eth: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className="glass"
+                        placeholder="BTC/ETH min (e.g. 50)"
+                      />
+                      <p className="text-xs text-muted-foreground">Binance requires $50 for BTC/ETH</p>
                     </div>
                     <div className="space-y-2">
                       <Label>Min Risk/Reward</Label>

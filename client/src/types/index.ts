@@ -52,6 +52,7 @@ export interface RiskControlConfig {
   max_position_percent: number;
   max_margin_usage: number;
   min_position_usd: number;
+  min_position_size_btc_eth?: number;
   min_confidence: number;
   min_risk_reward_ratio: number;
   max_daily_loss_pct?: number;
