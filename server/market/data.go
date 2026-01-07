@@ -145,36 +145,40 @@ func (d *DataProvider) FormatForAI(data *MarketData) string {
 	emaSpread := ((data.EMA9 - data.EMA21) / data.EMA21) * 100
 	if data.EMA9 > data.EMA21 {
 		sb.WriteString(fmt.Sprintf("EMA Trend: BULLISH (EMA9 > EMA21 by %.2f%%)\n", emaSpread))
-		if emaSpread > 1.0 {
+		if emaSpread > 0.5 {
 			sb.WriteString("📈 Strong bullish trend. Good for LONG.\n")
-		} else if emaSpread < 0.3 {
-			sb.WriteString("⚠️ Weak/sideways. Trend may reverse. HOLD recommended.\n")
+		} else if emaSpread > 0.15 {
+			sb.WriteString("📊 Moderate bullish trend. LONG possible with caution.\n")
+		} else {
+			sb.WriteString("⚠️ Very weak trend. Consider waiting or tight stops.\n")
 		}
 	} else {
 		sb.WriteString(fmt.Sprintf("EMA Trend: BEARISH (EMA9 < EMA21 by %.2f%%)\n", -emaSpread))
-		if emaSpread < -1.0 {
+		if emaSpread < -0.5 {
 			sb.WriteString("📉 Strong bearish trend. Good for SHORT.\n")
-		} else if emaSpread > -0.3 {
-			sb.WriteString("⚠️ Weak/sideways. Trend may reverse. HOLD recommended.\n")
+		} else if emaSpread < -0.15 {
+			sb.WriteString("📊 Moderate bearish trend. SHORT possible with caution.\n")
+		} else {
+			sb.WriteString("⚠️ Very weak trend. Consider waiting or tight stops.\n")
 		}
 	}
 
 	// RSI with entry guidance
 	sb.WriteString(fmt.Sprintf("RSI (14): %.2f", data.RSI))
-	if data.RSI > 70 {
-		sb.WriteString(" [OVERBOUGHT ⚠️ DO NOT LONG]\n")
+	if data.RSI > 75 {
+		sb.WriteString(" [OVERBOUGHT ⚠️ Risky for LONG]\n")
 	} else if data.RSI > 65 {
-		sb.WriteString(" [HIGH - Risky for LONG entry]\n")
-	} else if data.RSI < 30 {
-		sb.WriteString(" [OVERSOLD ⚠️ DO NOT SHORT]\n")
+		sb.WriteString(" [HIGH - Still OK for LONG with tight SL]\n")
+	} else if data.RSI < 25 {
+		sb.WriteString(" [OVERSOLD ⚠️ Risky for SHORT]\n")
 	} else if data.RSI < 35 {
-		sb.WriteString(" [LOW - Risky for SHORT entry]\n")
-	} else if data.RSI > 50 && data.RSI < 65 {
-		sb.WriteString(" [BULLISH NEUTRAL - OK for LONG]\n")
-	} else if data.RSI < 50 && data.RSI > 35 {
-		sb.WriteString(" [BEARISH NEUTRAL - OK for SHORT]\n")
+		sb.WriteString(" [LOW - Still OK for SHORT with tight SL]\n")
+	} else if data.RSI > 45 && data.RSI <= 65 {
+		sb.WriteString(" [BULLISH - Good for LONG]\n")
+	} else if data.RSI >= 35 && data.RSI < 55 {
+		sb.WriteString(" [BEARISH - Good for SHORT]\n")
 	} else {
-		sb.WriteString(" [NEUTRAL]\n")
+		sb.WriteString(" [NEUTRAL - Either direction OK]\n")
 	}
 
 	sb.WriteString(fmt.Sprintf("MACD: %.4f\n", data.MACD))
@@ -225,11 +229,15 @@ func (d *DataProvider) FormatForAI(data *MarketData) string {
 
 	sb.WriteString(fmt.Sprintf("LONG Score: %d/4 | SHORT Score: %d/4\n", longScore, shortScore))
 	if longScore >= 3 {
-		sb.WriteString("✅ CONDITIONS FAVOR LONG ENTRY\n")
+		sb.WriteString("✅ STRONG: CONDITIONS FAVOR LONG ENTRY\n")
 	} else if shortScore >= 3 {
-		sb.WriteString("✅ CONDITIONS FAVOR SHORT ENTRY\n")
+		sb.WriteString("✅ STRONG: CONDITIONS FAVOR SHORT ENTRY\n")
+	} else if longScore >= 2 {
+		sb.WriteString("📊 MODERATE: LONG entry possible with caution\n")
+	} else if shortScore >= 2 {
+		sb.WriteString("📊 MODERATE: SHORT entry possible with caution\n")
 	} else {
-		sb.WriteString("❌ MIXED SIGNALS - RECOMMEND HOLD\n")
+		sb.WriteString("⚠️ WEAK: Mixed signals, higher risk entry\n")
 	}
 	sb.WriteString("\n")
 
