@@ -41,7 +41,7 @@ const TraderItem = ({
       value={trader}
       dragListener={false}
       dragControls={dragControls}
-      className="relative mb-4 last:mb-0"
+      className="relative mb-2 last:mb-0"
     >
       <SpotlightCard className="p-5 pl-12">
         {/* Drag Handle */}

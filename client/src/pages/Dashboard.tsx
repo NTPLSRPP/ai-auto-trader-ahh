@@ -63,7 +63,20 @@ export default function Dashboard() {
   const loadTraders = async () => {
     try {
       const res = await getTraders();
-      setTraders(res.data.traders || []);
+      const savedOrder = JSON.parse(localStorage.getItem('trader_order') || '[]');
+      let loadedTraders = res.data.traders || [];
+
+      if (savedOrder.length > 0) {
+        loadedTraders = loadedTraders.sort((a: Trader, b: Trader) => {
+          const indexA = savedOrder.indexOf(a.id);
+          const indexB = savedOrder.indexOf(b.id);
+          if (indexA === -1 && indexB === -1) return 0;
+          if (indexA === -1) return 1;
+          if (indexB === -1) return -1;
+          return indexA - indexB;
+        });
+      }
+      setTraders(loadedTraders);
       if (res.data.traders?.length > 0 && !selectedTrader) {
         setSelectedTrader(res.data.traders[0].id);
       }
