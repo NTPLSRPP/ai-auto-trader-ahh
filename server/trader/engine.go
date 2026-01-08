@@ -1976,6 +1976,42 @@ func (e *Engine) startDrawdownMonitor(ctx context.Context) {
 	}
 }
 
+// lastRiskSettingsLog tracks when we last logged risk settings (for rate limiting)
+var lastRiskSettingsLog = make(map[string]time.Time)
+var lastRiskSettingsLogMu sync.Mutex
+
+// logActiveRiskSettings logs which risk management features are active (rate limited to once per minute)
+func (e *Engine) logActiveRiskSettings(rc store.RiskControlConfig) {
+	lastRiskSettingsLogMu.Lock()
+	defer lastRiskSettingsLogMu.Unlock()
+
+	// Only log once per minute per engine
+	if lastLog, exists := lastRiskSettingsLog[e.id]; exists && time.Since(lastLog) < time.Minute {
+		return
+	}
+	lastRiskSettingsLog[e.id] = time.Now()
+
+	var features []string
+	if rc.EnableTrailingStop {
+		features = append(features, fmt.Sprintf("TrailingStop(activate=%.1f%%, dist=%.1f%%)", rc.TrailingStopActivatePct, rc.TrailingStopDistancePct))
+	}
+	if rc.EnableMaxHoldDuration {
+		features = append(features, fmt.Sprintf("MaxHold(%dm)", rc.MaxHoldDurationMins))
+	}
+	if rc.EnableSmartLossCut {
+		features = append(features, fmt.Sprintf("SmartLossCut(%dm, %.1f%%)", rc.SmartLossCutMins, rc.SmartLossCutPct))
+	}
+	if rc.EnableEmergencyShutdown {
+		features = append(features, fmt.Sprintf("EmergencyShutdown($%.0f)", rc.EmergencyMinBalance))
+	}
+
+	if len(features) > 0 {
+		log.Printf("[%s] ⚙️ Active Risk Features: %s", e.name, strings.Join(features, ", "))
+	} else {
+		log.Printf("[%s] ⚙️ No advanced risk features enabled (using exchange SL/TP only)", e.name)
+	}
+}
+
 // checkPositionDrawdown checks if any positions should be closed due to drawdown
 func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 	if e.strategy == nil {
@@ -1990,6 +2026,9 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 	}
 
 	rc := e.strategy.Config.RiskControl
+
+	// Log active features once per minute (avoid spam)
+	e.logActiveRiskSettings(rc)
 	drawdownThreshold := rc.DrawdownCloseThreshold
 	if drawdownThreshold <= 0 {
 		drawdownThreshold = 40.0 // Default 40%

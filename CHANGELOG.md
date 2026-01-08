@@ -2,9 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-01-08
+## [Unreleased] - 2026-01-09
 
 ### Added
+- **Live Strategy Reload**: Strategy configuration changes now apply immediately to running traders without requiring a restart. When you save a strategy in the UI, all running engines using that strategy are automatically updated.
+- **Risk Settings Logging**: Added detailed logging that shows which risk management features are active (Trailing Stop, Max Hold Duration, Smart Loss Cut, Emergency Shutdown) once per minute per trader. This helps verify your settings are working correctly.
 - **Copy Trading Support**: Added "Binance Copy Trading" mode to strategies. In this mode, the bot acts as a monitor for a copy trading portfolio (reading status, balance, positions) without executing independent AI trades. (#25e8b00)
 - **Trader Configuration**:
   - Implemented per-trader OpenRouter API key and customized model selection, allowing different bots to use different AI accounts/models. (#2ba362b)
@@ -38,10 +40,11 @@ All notable changes to this project will be documented in this file.
   - Hidden irrelevant strategy settings (Risk Control, AI Prompt) when "Binance Copy Trading" mode is active.
 
 ### Fixed
+- **Critical: Simple Mode blocking Trailing Stop**: Fixed bug where "Simple Mode" being enabled would prevent ALL advanced risk features (Trailing Stop, Max Hold, Smart Loss Cut) from working, even if they were individually enabled. Users must now explicitly disable Simple Mode to use these features.
+- **Strategy Config Not Applying**: Fixed critical bug where strategy configuration changes made in the UI were not applied to running traders until they were stopped and restarted. Strategy changes now apply immediately.
 - Fixed critical issue where orphaned SL/TP orders caused "Order Immediate or Cancel" errors. (#78db4b5)
 - Fixed filtering of inactive/delisted symbols from Binance API. (#bf4baef)
 - Fixed various UI labeling issues in the Strategy Editor.
-- Fixed API error when using "Binance Copy Trading" mode on Testnet (mocked status as feature is Mainnet only).
 
 ### Removed
 - Removed legacy `logs.txt` and temporary CSV export files. (#4051bd7, #8956d63)
