@@ -34,6 +34,8 @@ All notable changes to this project will be documented in this file.
 - **Architecture**:
   - Refactored `StrategyConfig` to support new Trading Mode and indicator settings. (#25e8b00, #ea19592)
   - Optimized build process and reduced minimum position sizes for testing. (#a7fe563)
+- **UI/UX**:
+  - Hidden irrelevant strategy settings (Risk Control, AI Prompt) when "Binance Copy Trading" mode is active.
 
 ### Fixed
 - Fixed critical issue where orphaned SL/TP orders caused "Order Immediate or Cancel" errors. (#78db4b5)
