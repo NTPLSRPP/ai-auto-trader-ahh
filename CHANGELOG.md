@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 - Fixed critical issue where orphaned SL/TP orders caused "Order Immediate or Cancel" errors. (#78db4b5)
 - Fixed filtering of inactive/delisted symbols from Binance API. (#bf4baef)
 - Fixed various UI labeling issues in the Strategy Editor.
+- Fixed API error when using "Binance Copy Trading" mode on Testnet (mocked status as feature is Mainnet only).
 
 ### Removed
 - Removed legacy `logs.txt` and temporary CSV export files. (#4051bd7, #8956d63)

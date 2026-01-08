@@ -21,11 +21,11 @@ func (c *BinanceClient) doSAPIRequest(ctx context.Context, method, endpoint stri
 		params.Set("signature", signature)
 	}
 
-	// Always use the main API base URL for SAPI calls
+	// Determine base URL based on whether we are in Testnet or Mainnet
 	baseURL := BinanceAPIBaseURL
-	// Note: Testnet support for SAPI might differ, but Copy Trading is usually mainnet only feature for production bots
-	// If needed, we can add a testnet URL for SAPI, but usually it is https://testnet.binance.vision
-	// However, Copy Trading might not be available on standard testnet. Assuming mainnet for now.
+	if c.baseURL == BinanceTestnetURL {
+		baseURL = "https://testnet.binance.vision"
+	}
 
 	if method == "GET" || method == "DELETE" {
 		reqURL = baseURL + endpoint
@@ -74,6 +74,15 @@ type CopyTradingStatus struct {
 // GetCopyTradingStatus checks if the user is a Lead Trader or Copy Trader
 func (c *BinanceClient) GetCopyTradingStatus(ctx context.Context) (*CopyTradingStatus, error) {
 	// Endpoint: GET /sapi/v1/copyTrading/futures/userStatus
+	if c.baseURL == BinanceTestnetURL {
+		// Copy Trading is not supported on Testnet.
+		// Return a default status to avoid API errors and allow the bot to run in monitoring mode.
+		return &CopyTradingStatus{
+			IsLeadTrader: false,
+			IsCopyTrader: false,
+		}, nil
+	}
+
 	params := url.Values{}
 
 	// SAPI endpoints require signature
