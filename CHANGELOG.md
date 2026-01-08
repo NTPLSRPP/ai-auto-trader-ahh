@@ -40,7 +40,7 @@ All notable changes to this project will be documented in this file.
   - Hidden irrelevant strategy settings (Risk Control, AI Prompt) when "Binance Copy Trading" mode is active.
 
 ### Fixed
-- **Critical: Simple Mode blocking Trailing Stop**: Fixed bug where "Simple Mode" being enabled would prevent ALL advanced risk features (Trailing Stop, Max Hold, Smart Loss Cut) from working, even if they were individually enabled. Users must now explicitly disable Simple Mode to use these features.
+- **Simple Mode now works with Trailing Stop**: Redesigned Simple Mode to only disable automatic drawdown protection. Trailing Stop, Max Hold Duration, and Smart Loss Cut now work correctly when enabled, even if Simple Mode is ON.
 - **Strategy Config Not Applying**: Fixed critical bug where strategy configuration changes made in the UI were not applied to running traders until they were stopped and restarted. Strategy changes now apply immediately.
 - Fixed critical issue where orphaned SL/TP orders caused "Order Immediate or Cancel" errors. (#78db4b5)
 - Fixed filtering of inactive/delisted symbols from Binance API. (#bf4baef)

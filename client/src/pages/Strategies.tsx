@@ -752,7 +752,7 @@ export default function Strategies() {
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground pl-1">
-                            Disables trailing stop and smart loss cut. Lets trades run to their SL/TP targets without interference.
+                            Uses simpler AI prompts and disables automatic drawdown protection. Trailing Stop, Max Hold, and Smart Loss Cut still work if enabled.
                           </p>
                         </label>
                       </div>

@@ -2018,17 +2018,14 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		return
 	}
 
-	// SIMPLE MODE: Skip all advanced risk management, trust SL/TP on exchange
-	if e.strategy.Config.SimpleMode {
-		// In Simple Mode, we don't do trailing stops, smart cuts, or max hold
-		// Just let the exchange SL/TP orders handle everything
-		return
-	}
-
 	rc := e.strategy.Config.RiskControl
+	isSimpleMode := e.strategy.Config.SimpleMode
 
 	// Log active features once per minute (avoid spam)
 	e.logActiveRiskSettings(rc)
+
+	// SIMPLE MODE affects only automatic drawdown protection
+	// Explicitly enabled features (Trailing Stop, Max Hold, Smart Loss Cut) still work
 	drawdownThreshold := rc.DrawdownCloseThreshold
 	if drawdownThreshold <= 0 {
 		drawdownThreshold = 40.0 // Default 40%
@@ -2168,8 +2165,14 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		}
 
 		// =====================================================================
-		// 4. DRAWDOWN PROTECTION (Original logic)
+		// 4. DRAWDOWN PROTECTION (Original logic) - SKIPPED in Simple Mode
 		// =====================================================================
+		// In Simple Mode, we skip ONLY this automatic drawdown protection
+		// (features 1-3 above are explicitly enabled by user, so they still run)
+		if isSimpleMode {
+			continue
+		}
+
 		// Update peak P&L
 		e.UpdatePeakPnL(pos.Symbol, side, pnlPct)
 		peakPnL := e.GetPeakPnL(pos.Symbol, side)
