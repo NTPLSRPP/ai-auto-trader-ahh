@@ -907,23 +907,45 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		// The AI was closing at -0.76% with 90% confidence, losing $298.
 		// We need to be MORE protective of positions in the noise zone.
 		//
-		// Rules:
-		// 1. SIGNIFICANT LOSS (< -1.5%): Allow close immediately
-		// 2. NOISE ZONE (-1.5% to +1.5%): BLOCK most closes
-		//    - Only allow if confidence >= 95% (very rare)
-		//    - AND position has been open > 10 minutes (not brand new)
-		// 3. PROFIT ZONE (> +1.5%): Allow close to lock in gains
+		// Rules (configurable via Strategy > Risk Control > Noise Zone):
+		// 1. SIGNIFICANT LOSS (< lower bound): Allow close immediately
+		// 2. NOISE ZONE (lower to upper bound): BLOCK most closes
+		//    - Only allow if confidence >= threshold (very rare)
+		//    - AND position has been open > min hold minutes (not brand new)
+		// 3. PROFIT ZONE (> upper bound): Allow close to lock in gains
 
-		const (
-			significantLossThreshold = -1.5 // Only allow close if loss > 1.5% (was -1.2%)
-			noiseZoneCeiling         = 1.5  // Profit needs to be > 1.5% to close
-			minHoldBeforeClose       = 10   // Minutes: position must be open at least 10 mins before AI can close
-		)
+		// Get noise zone settings from config (with defaults)
+		rc := e.strategy.Config.RiskControl
+		enableNoiseZone := true // Default enabled
+		significantLossThreshold := -1.5
+		noiseZoneCeiling := 1.5
+		minHoldBeforeClose := 10
+
+		if e.strategy != nil {
+			// Check if noise zone protection is disabled
+			if !rc.EnableNoiseZoneProtection && rc.NoiseZoneLowerBound == 0 && rc.NoiseZoneUpperBound == 0 {
+				// Fields are all zero/false - use defaults (enabled)
+			} else if !rc.EnableNoiseZoneProtection {
+				// Explicitly disabled
+				enableNoiseZone = false
+			}
+
+			// Get configurable bounds
+			if rc.NoiseZoneLowerBound != 0 {
+				significantLossThreshold = rc.NoiseZoneLowerBound
+			}
+			if rc.NoiseZoneUpperBound != 0 {
+				noiseZoneCeiling = rc.NoiseZoneUpperBound
+			}
+			if rc.MinHoldBeforeClose > 0 {
+				minHoldBeforeClose = rc.MinHoldBeforeClose
+			}
+		}
 
 		// Get high confidence threshold from config (default 95% for noise zone override)
 		highConfidenceThreshold := 95.0
-		if e.strategy != nil && e.strategy.Config.RiskControl.HighConfidenceCloseThreshold > 0 {
-			highConfidenceThreshold = e.strategy.Config.RiskControl.HighConfidenceCloseThreshold
+		if e.strategy != nil && rc.HighConfidenceCloseThreshold > 0 {
+			highConfidenceThreshold = rc.HighConfidenceCloseThreshold
 		}
 
 		isHighConfidence := decision.Confidence >= highConfidenceThreshold
@@ -931,8 +953,12 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		holdMins := holdDuration.Minutes()
 		isNewPosition := holdMins < float64(minHoldBeforeClose)
 
-		// Case 1: Significant loss - ALLOW (but log warning if position is new)
-		if pnlPct < significantLossThreshold {
+		// Skip noise zone protection if disabled
+		if !enableNoiseZone {
+			log.Printf("[%s][%s] ⚙️ Noise zone protection DISABLED - allowing close (PnL: %.2f%%)", e.name, symbol, pnlPct)
+			// Continue to close...
+		} else if pnlPct < significantLossThreshold {
+			// Case 1: Significant loss - ALLOW (but log warning if position is new)
 			if isNewPosition {
 				log.Printf("[%s][%s] ⚠️ WARNING: Closing NEW position at loss (%.2f%% in %.1f mins). Consider if SL is too tight.",
 					e.name, symbol, pnlPct, holdMins)
@@ -946,7 +972,7 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 				e.name, symbol, pnlPct, noiseZoneCeiling)
 			// Continue to close...
 		} else {
-			// Case 3: NOISE ZONE (-1.5% to +1.5%) - BLOCK unless very high confidence
+			// Case 3: NOISE ZONE (lower to upper bound) - BLOCK unless very high confidence
 			if isNewPosition {
 				// NEW positions in noise zone: ALWAYS block, no override
 				log.Printf("[%s][%s] ❌ BLOCKED: Position too new (%.1f mins) and in noise zone (PnL: %.2f%%). Let it develop.",

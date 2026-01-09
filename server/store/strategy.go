@@ -122,7 +122,13 @@ type RiskControlConfig struct {
 	// AI decision thresholds
 	MinConfidence                int     `json:"min_confidence"`                  // Min AI confidence to trade (default: 70)
 	MinRiskRewardRatio           float64 `json:"min_risk_reward_ratio"`           // Min TP/SL ratio (default: 3.0)
-	HighConfidenceCloseThreshold float64 `json:"high_confidence_close_threshold"` // Min confidence to close in noise zone (default: 85)
+	HighConfidenceCloseThreshold float64 `json:"high_confidence_close_threshold"` // Min confidence to close in noise zone (default: 95)
+
+	// NOISE ZONE PROTECTION - Prevent closing positions too early
+	EnableNoiseZoneProtection bool    `json:"enable_noise_zone_protection"` // Enable noise zone protection (default: true)
+	NoiseZoneLowerBound       float64 `json:"noise_zone_lower_bound"`       // Lower bound of noise zone, below this = allow close (default: -1.5%)
+	NoiseZoneUpperBound       float64 `json:"noise_zone_upper_bound"`       // Upper bound of noise zone, above this = allow close (default: 1.5%)
+	MinHoldBeforeClose        int     `json:"min_hold_before_close"`        // Min minutes to hold before AI can close (default: 10)
 
 	// Daily loss and drawdown limits
 	MaxDailyLossPct           float64 `json:"max_daily_loss_pct"`            // Max daily loss % before stopping (default: 5.0)
@@ -205,6 +211,12 @@ func DefaultStrategyConfig() StrategyConfig {
 			MinConfidence:                85,   // Raised from 70: Only trade on high confidence signals
 			MinRiskRewardRatio:           3.0,  // Minimum 3:1 reward/risk
 			HighConfidenceCloseThreshold: 95.0, // Raised from 85: Require very high confidence to close in noise zone
+
+			// Noise Zone Protection defaults
+			EnableNoiseZoneProtection: true, // Enabled by default
+			NoiseZoneLowerBound:       -1.5, // Below -1.5% = allow close (significant loss)
+			NoiseZoneUpperBound:       1.5,  // Above 1.5% = allow close (profit taking)
+			MinHoldBeforeClose:        10,   // Must hold at least 10 mins before AI can close
 
 			// Daily loss and drawdown
 			MaxDailyLossPct:           15.0,  // Stop trading after 15% daily loss (better for high leverage)

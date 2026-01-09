@@ -77,6 +77,11 @@ export interface RiskControlConfig {
   enable_smart_loss_cut?: boolean;
   smart_loss_cut_mins?: number;
   smart_loss_cut_pct?: number;
+  // Noise Zone Protection
+  enable_noise_zone_protection?: boolean;
+  noise_zone_lower_bound?: number;
+  noise_zone_upper_bound?: number;
+  min_hold_before_close?: number;
 }
 
 export interface Trader {

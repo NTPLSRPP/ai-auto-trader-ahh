@@ -1343,6 +1343,117 @@ export default function Strategies() {
                             </div>
                           )}
                         </div>
+
+                        {/* Noise Zone Protection */}
+                        <div className="space-y-3">
+                          <label className="flex items-start space-x-3 cursor-pointer">
+                            <Checkbox
+                              checked={editingStrategy.config.risk_control.enable_noise_zone_protection ?? true}
+                              onCheckedChange={(c) => setEditingStrategy({
+                                ...editingStrategy,
+                                config: {
+                                  ...editingStrategy.config,
+                                  risk_control: {
+                                    ...editingStrategy.config.risk_control,
+                                    enable_noise_zone_protection: !!c
+                                  }
+                                }
+                              })}
+                              className="mt-0.5"
+                            />
+                            <div>
+                              <span className="font-medium text-sm">Noise Zone Protection</span>
+                              <p className="text-xs text-muted-foreground">Block AI from closing positions too early in the "noise zone"</p>
+                            </div>
+                          </label>
+                          {(editingStrategy.config.risk_control.enable_noise_zone_protection ?? true) && (
+                            <div className="grid grid-cols-2 gap-3 pl-9">
+                              <div className="space-y-2">
+                                <Label className="text-xs">Lower Bound %</Label>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  value={editingStrategy.config.risk_control.noise_zone_lower_bound ?? -1.5}
+                                  onChange={(e) => setEditingStrategy({
+                                    ...editingStrategy,
+                                    config: {
+                                      ...editingStrategy.config,
+                                      risk_control: {
+                                        ...editingStrategy.config.risk_control,
+                                        noise_zone_lower_bound: parseFloat(e.target.value)
+                                      }
+                                    }
+                                  })}
+                                  className="glass h-8 text-sm"
+                                  placeholder="-1.5"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Below this = allow loss cut</p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs">Upper Bound %</Label>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  value={editingStrategy.config.risk_control.noise_zone_upper_bound ?? 1.5}
+                                  onChange={(e) => setEditingStrategy({
+                                    ...editingStrategy,
+                                    config: {
+                                      ...editingStrategy.config,
+                                      risk_control: {
+                                        ...editingStrategy.config.risk_control,
+                                        noise_zone_upper_bound: parseFloat(e.target.value)
+                                      }
+                                    }
+                                  })}
+                                  className="glass h-8 text-sm"
+                                  placeholder="1.5"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Above this = allow profit take</p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs">Min Hold (mins)</Label>
+                                <Input
+                                  type="number"
+                                  value={editingStrategy.config.risk_control.min_hold_before_close ?? 10}
+                                  onChange={(e) => setEditingStrategy({
+                                    ...editingStrategy,
+                                    config: {
+                                      ...editingStrategy.config,
+                                      risk_control: {
+                                        ...editingStrategy.config.risk_control,
+                                        min_hold_before_close: parseInt(e.target.value)
+                                      }
+                                    }
+                                  })}
+                                  className="glass h-8 text-sm"
+                                  placeholder="10"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Min time before AI can close</p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs">Override Confidence %</Label>
+                                <Input
+                                  type="number"
+                                  step="1"
+                                  value={editingStrategy.config.risk_control.high_confidence_close_threshold ?? 95}
+                                  onChange={(e) => setEditingStrategy({
+                                    ...editingStrategy,
+                                    config: {
+                                      ...editingStrategy.config,
+                                      risk_control: {
+                                        ...editingStrategy.config.risk_control,
+                                        high_confidence_close_threshold: parseFloat(e.target.value)
+                                      }
+                                    }
+                                  })}
+                                  className="glass h-8 text-sm"
+                                  placeholder="95"
+                                />
+                                <p className="text-[10px] text-muted-foreground">AI confidence to override noise zone</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </CollapsibleSection>
