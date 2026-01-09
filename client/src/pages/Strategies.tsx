@@ -1325,6 +1325,7 @@ export default function Strategies() {
                                 <Input
                                   type="number"
                                   step="0.1"
+                                  min="-100"
                                   value={editingStrategy.config.risk_control.smart_loss_cut_pct ?? -1.0}
                                   onChange={(e) => setEditingStrategy({
                                     ...editingStrategy,
@@ -1373,6 +1374,7 @@ export default function Strategies() {
                                 <Input
                                   type="number"
                                   step="0.1"
+                                  min="-100"
                                   value={editingStrategy.config.risk_control.noise_zone_lower_bound ?? -1.5}
                                   onChange={(e) => setEditingStrategy({
                                     ...editingStrategy,
