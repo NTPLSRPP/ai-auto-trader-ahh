@@ -2160,17 +2160,16 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Calculate current P&L % (including leverage, matching NOFX)
+		// Calculate current P&L % (raw price movement, NOT leveraged)
+		// This matches the CLOSE action calculation and SL/TP percentages
+		// Note: The dollar P&L already reflects leverage, but percentage thresholds
+		// like noise zone (-2% to +8%) should be based on price movement
 		var pnlPct float64
-		leverage := float64(pos.Leverage)
-		if leverage <= 0 {
-			leverage = 10 // Default leverage
-		}
 		if pos.EntryPrice > 0 {
 			if pos.PositionAmt > 0 {
-				pnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * leverage * 100
+				pnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * 100
 			} else {
-				pnlPct = ((pos.EntryPrice - pos.MarkPrice) / pos.EntryPrice) * leverage * 100
+				pnlPct = ((pos.EntryPrice - pos.MarkPrice) / pos.EntryPrice) * 100
 			}
 		}
 
