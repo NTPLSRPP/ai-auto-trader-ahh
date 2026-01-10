@@ -736,14 +736,15 @@ Your final analysis summarizing the key points from the debate...
 // determineConsensus determines the final consensus from votes
 func (e *Engine) determineConsensus(votes []*Vote) []*Decision {
 	type actionData struct {
-		score     float64
-		totalConf int
-		totalLev  int
-		totalPos  float64
-		totalSL   float64
-		totalTP   float64
-		count     int
-		reasons   []string
+		score       float64
+		totalConf   int
+		totalLev    int
+		totalPos    float64 // PositionPct sum
+		totalPosUSD float64 // PositionSizeUSD sum - preserve absolute sizes
+		totalSL     float64
+		totalTP     float64
+		count       int
+		reasons     []string
 	}
 
 	symbolActions := make(map[string]map[string]*actionData)
@@ -768,6 +769,7 @@ func (e *Engine) determineConsensus(votes []*Vote) []*Decision {
 			ad.totalConf += d.Confidence
 			ad.totalLev += d.Leverage
 			ad.totalPos += d.PositionPct
+			ad.totalPosUSD += d.PositionSizeUSD // Preserve absolute position size
 			ad.totalSL += d.StopLoss
 			ad.totalTP += d.TakeProfit
 			ad.count++
@@ -800,26 +802,28 @@ func (e *Engine) determineConsensus(votes []*Vote) []*Decision {
 		avgConf := winningData.totalConf / winningData.count
 		avgLev := winningData.totalLev / winningData.count
 		avgPos := winningData.totalPos / float64(winningData.count)
+		avgPosUSD := winningData.totalPosUSD / float64(winningData.count)
 		avgSL := winningData.totalSL / float64(winningData.count)
 		avgTP := winningData.totalTP / float64(winningData.count)
 
-		// Apply defaults
+		// Apply defaults only if no position info provided
 		if avgLev <= 0 {
 			avgLev = 5
 		}
-		if avgPos <= 0 {
-			avgPos = 0.2
+		if avgPos <= 0 && avgPosUSD <= 0 {
+			avgPos = 0.2 // Default 20% only if neither provided
 		}
 
 		decision := &Decision{
-			Symbol:      symbol,
-			Action:      winningAction,
-			Confidence:  avgConf,
-			Leverage:    avgLev,
-			PositionPct: avgPos,
-			StopLoss:    avgSL,
-			TakeProfit:  avgTP,
-			Reasoning:   strings.Join(winningData.reasons, "; "),
+			Symbol:          symbol,
+			Action:          winningAction,
+			Confidence:      avgConf,
+			Leverage:        avgLev,
+			PositionPct:     avgPos,
+			PositionSizeUSD: avgPosUSD, // Preserve absolute position size in consensus
+			StopLoss:        avgSL,
+			TakeProfit:      avgTP,
+			Reasoning:       strings.Join(winningData.reasons, "; "),
 		}
 
 		results = append(results, decision)
@@ -1002,24 +1006,27 @@ func convertRawDecisions(rawDecisions []struct {
 	totalConf := 0
 
 	for _, rd := range rawDecisions {
-		// Use position_size_usd if available, otherwise convert position_pct
+		// Preserve both PositionSizeUSD and PositionPct
+		// DO NOT convert USD to percent with hardcoded account size - this was losing data
 		posPct := rd.PositionPct
-		if posPct == 0 && rd.PositionSizeUSD > 0 {
-			posPct = rd.PositionSizeUSD / 10000.0 // Assuming $10k account
-		}
-		if posPct == 0 {
-			posPct = 0.2 // Default 20%
+		posUSD := rd.PositionSizeUSD
+
+		// Only apply defaults if both are missing
+		if posPct == 0 && posUSD == 0 {
+			posPct = 0.2 // Default 20% only if nothing provided
+			log.Printf("[Debate] No position size provided, using default %.0f%%", posPct*100)
 		}
 
 		d := &Decision{
-			Symbol:      rd.Symbol,
-			Action:      rd.Action,
-			Confidence:  rd.Confidence,
-			Leverage:    rd.Leverage,
-			PositionPct: posPct,
-			StopLoss:    rd.StopLoss,
-			TakeProfit:  rd.TakeProfit,
-			Reasoning:   rd.Reasoning,
+			Symbol:          rd.Symbol,
+			Action:          rd.Action,
+			Confidence:      rd.Confidence,
+			Leverage:        rd.Leverage,
+			PositionPct:     posPct,
+			PositionSizeUSD: posUSD, // Preserve absolute position size
+			StopLoss:        rd.StopLoss,
+			TakeProfit:      rd.TakeProfit,
+			Reasoning:       rd.Reasoning,
 		}
 		decisions = append(decisions, d)
 		totalConf += rd.Confidence

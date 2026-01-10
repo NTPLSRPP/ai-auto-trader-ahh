@@ -193,7 +193,7 @@ func (e *Engine) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to Binance: %w", err)
 	}
 	e.account = account
-	e.initialBalance = account.TotalWalletBalance // Set initial balance for daily loss tracking
+	e.initialBalance = account.TotalMarginBalance // Set initial balance for daily loss tracking (includes unrealized P&L)
 	e.lastResetTime = time.Now()
 	log.Printf("[%s] Connected to Binance. Balance: $%.2f", e.name, account.TotalWalletBalance)
 
@@ -686,6 +686,11 @@ func (e *Engine) analyzeAndTrade(ctx context.Context, symbol string) *TradeLog {
 
 // executeTrade executes the trade and returns realized PnL (if closing) and error
 func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.TradingDecision, hasPosition bool, currentPos *exchange.Position) (float64, error) {
+	// CRITICAL: Reject invalid symbols - "ALL" is only for wait/hold, never for actual trades
+	if symbol == "ALL" || symbol == "" {
+		return 0, fmt.Errorf("invalid symbol '%s' - cannot execute trade on ALL/empty symbol", symbol)
+	}
+
 	// Get account info for position sizing
 	account, err := e.binance.GetAccountInfo(ctx)
 	if err != nil {
@@ -1006,15 +1011,30 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 			}
 		}
 
-		// Capture realized PnL before closing
-		realizedPnL := currentPos.UnrealizedProfit
+		// Estimate P&L before closing (for logging)
+		estimatedPnL := currentPos.UnrealizedProfit
 
-		log.Printf("[%s][%s] Closing %s position: %.4f (held for %v, profit: $%.2f = %.2f%%)", e.name, symbol, side, currentPos.PositionAmt, holdDuration, realizedPnL, pnlPct)
-		if _, err := e.binance.ClosePosition(ctx, symbol, currentPos.PositionAmt); err != nil {
+		log.Printf("[%s][%s] Closing %s position: %.4f (held for %v, estimated profit: $%.2f = %.2f%%)", e.name, symbol, side, currentPos.PositionAmt, holdDuration, estimatedPnL, pnlPct)
+		closeOrder, err := e.binance.ClosePosition(ctx, symbol, currentPos.PositionAmt)
+		if err != nil {
 			return 0, fmt.Errorf("failed to close position: %w", err)
 		}
 		e.clearPositionTracking(symbol, side)
 		e.cancelBracketOrders(ctx, symbol)
+
+		// Calculate actual realized P&L from fill price
+		realizedPnL := estimatedPnL // Default to estimated if we can't calculate
+		if closeOrder != nil && closeOrder.AvgPrice > 0 && closeOrder.ExecutedQty > 0 {
+			// For LONG: P&L = (ExitPrice - EntryPrice) * Quantity
+			// For SHORT: P&L = (EntryPrice - ExitPrice) * Quantity
+			if currentPos.PositionAmt > 0 { // Long position
+				realizedPnL = (closeOrder.AvgPrice - currentPos.EntryPrice) * closeOrder.ExecutedQty
+			} else { // Short position
+				realizedPnL = (currentPos.EntryPrice - closeOrder.AvgPrice) * closeOrder.ExecutedQty
+			}
+			log.Printf("[%s][%s] Actual realized P&L: $%.2f (fill price: %.4f, entry: %.4f, qty: %.4f)",
+				e.name, symbol, realizedPnL, closeOrder.AvgPrice, currentPos.EntryPrice, closeOrder.ExecutedQty)
+		}
 
 		// Return the realized PnL
 		return realizedPnL, nil
@@ -1671,18 +1691,27 @@ func (e *Engine) getSLTPPercentages(decision *ai.TradingDecision) (slPct, tpPct 
 	slPct = decision.StopLossPct
 	tpPct = decision.TakeProfitPct
 
-	// Validate and set defaults if needed
-	if slPct <= 0 || slPct > 10 {
-		slPct = 2.0 // Default 2% stop loss
-	}
-	if tpPct <= 0 || tpPct > 30 {
-		tpPct = 6.0 // Default 6% take profit (3:1 ratio)
+	// Only apply defaults if values are missing or clearly invalid
+	// Do NOT silently adjust R:R - let validateRiskRewardRatioPct reject bad ratios
+	if slPct <= 0 {
+		slPct = 2.0 // Default 2% stop loss only if not provided
+		log.Printf("[SL/TP] No SL provided, using default %.1f%%", slPct)
+	} else if slPct > 10 {
+		log.Printf("[SL/TP] WARNING: SL=%.1f%% exceeds 10%%, trade will be validated", slPct)
 	}
 
-	// Ensure minimum 3:1 ratio
-	if tpPct < slPct*2 {
-		tpPct = slPct * 3 // Force 3:1 ratio
-		log.Printf("[SL/TP] Adjusted TP to %.1f%% for 3:1 ratio (SL=%.1f%%)", tpPct, slPct)
+	if tpPct <= 0 {
+		tpPct = 6.0 // Default 6% take profit only if not provided
+		log.Printf("[SL/TP] No TP provided, using default %.1f%%", tpPct)
+	} else if tpPct > 30 {
+		log.Printf("[SL/TP] WARNING: TP=%.1f%% exceeds 30%%, trade will be validated", tpPct)
+	}
+
+	// DO NOT silently adjust R:R - this was hiding bad AI decisions
+	// Let validateRiskRewardRatioPct properly REJECT trades with bad R:R
+	ratio := tpPct / slPct
+	if ratio < 1.0 {
+		log.Printf("[SL/TP] WARNING: Poor R:R ratio %.2f:1 (SL=%.1f%%, TP=%.1f%%) - will be rejected by validator", ratio, slPct, tpPct)
 	}
 
 	return slPct, tpPct
@@ -1967,7 +1996,7 @@ func (e *Engine) checkDailyLoss() bool {
 	e.mu.RLock()
 	currentBalance := 0.0
 	if e.account != nil {
-		currentBalance = e.account.TotalWalletBalance + e.account.TotalUnrealizedProfit
+		currentBalance = e.account.TotalMarginBalance // Use TotalMarginBalance directly (same as wallet + unrealized)
 	}
 	initialBalance := e.initialBalance
 	e.mu.RUnlock()
@@ -2055,7 +2084,7 @@ func (e *Engine) resetDailyPnLIfNeeded() {
 	// Check if 24 hours have passed since last reset
 	if time.Since(e.lastResetTime) >= 24*time.Hour {
 		if e.account != nil {
-			e.initialBalance = e.account.TotalWalletBalance
+			e.initialBalance = e.account.TotalMarginBalance // Use TotalMarginBalance (includes unrealized P&L)
 		}
 		e.dailyPnL = 0
 		e.lastResetTime = time.Now()

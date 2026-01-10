@@ -46,6 +46,12 @@ func ValidateDecision(d *Decision, cfg *ValidationConfig) error {
 
 // validateOpeningDecision validates decisions that open new positions
 func validateOpeningDecision(d *Decision, cfg *ValidationConfig) error {
+	// CRITICAL: Reject "ALL" symbol for opening positions
+	// "ALL" is only valid for wait/hold actions, never for actual trades
+	if d.Symbol == "ALL" || d.Symbol == "" {
+		return fmt.Errorf("invalid symbol '%s' for opening position - cannot trade on ALL/empty symbol", d.Symbol)
+	}
+
 	// Determine max leverage and position ratio based on symbol
 	maxLeverage := cfg.AltcoinLeverage
 	posRatio := cfg.AltcoinPosRatio
@@ -120,11 +126,55 @@ func validateOpeningDecision(d *Decision, cfg *ValidationConfig) error {
 }
 
 // validateRiskReward validates the risk/reward ratio of a decision
-// validateRiskReward validates the risk/reward ratio of a decision
+// For decisions with absolute SL/TP prices, we estimate R:R using the midpoint as entry
 func validateRiskReward(d *Decision, minRatio float64) error {
-	// If Action is not opening, or EntryPrice is missing/zero (common for AI decisions
-	// which rely on execution time price), we cannot accurately validate R:R here.
-	// Rely on the AI prompt to enforce this.
+	if minRatio <= 0 {
+		return nil // Validation disabled
+	}
+
+	// Skip if SL/TP not provided (will use percentage-based defaults at execution)
+	if d.StopLoss <= 0 || d.TakeProfit <= 0 {
+		return nil
+	}
+
+	// For absolute prices, estimate entry as midpoint and validate R:R
+	// This catches obviously bad R:R ratios (e.g., SL far from TP in wrong direction)
+	if d.Action == ActionOpenLong {
+		// For long: SL should be below TP (already validated in validateOpeningDecision)
+		// Estimate entry as geometric mean of SL and TP for R:R calculation
+		entryEstimate := (d.StopLoss + d.TakeProfit) / 2
+		risk := entryEstimate - d.StopLoss
+		reward := d.TakeProfit - entryEstimate
+
+		if risk <= 0 {
+			return fmt.Errorf("invalid long position: SL (%.2f) should be below estimated entry (%.2f)", d.StopLoss, entryEstimate)
+		}
+
+		ratio := reward / risk
+		if ratio < minRatio {
+			log.Printf("WARNING: Long R:R ratio %.2f:1 below minimum %.2f:1 (SL=%.2f, TP=%.2f, est.entry=%.2f)",
+				ratio, minRatio, d.StopLoss, d.TakeProfit, entryEstimate)
+			return fmt.Errorf("risk-reward ratio %.2f:1 below minimum %.2f:1 for long position", ratio, minRatio)
+		}
+	} else if d.Action == ActionOpenShort {
+		// For short: SL should be above TP (already validated in validateOpeningDecision)
+		// Estimate entry as midpoint
+		entryEstimate := (d.StopLoss + d.TakeProfit) / 2
+		risk := d.StopLoss - entryEstimate
+		reward := entryEstimate - d.TakeProfit
+
+		if risk <= 0 {
+			return fmt.Errorf("invalid short position: SL (%.2f) should be above estimated entry (%.2f)", d.StopLoss, entryEstimate)
+		}
+
+		ratio := reward / risk
+		if ratio < minRatio {
+			log.Printf("WARNING: Short R:R ratio %.2f:1 below minimum %.2f:1 (SL=%.2f, TP=%.2f, est.entry=%.2f)",
+				ratio, minRatio, d.StopLoss, d.TakeProfit, entryEstimate)
+			return fmt.Errorf("risk-reward ratio %.2f:1 below minimum %.2f:1 for short position", ratio, minRatio)
+		}
+	}
+
 	return nil
 }
 
