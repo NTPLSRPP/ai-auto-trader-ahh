@@ -975,20 +975,25 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 
 		// Calculate PnL percentage
-		// Calculate PnL percentage (Leveraged ROE)
-		var pnlPct float64
+		// We calculate BOTH Raw (Price) and ROE (Equity) percentages for different uses:
+		// 1. Raw %: Used for Noise Zone (prevent instant triggers on tiny moves)
+		// 2. ROE %: Used for logging/user display (matches Binance UI)
+		var pnlPct float64    // Will hold Raw % for Noise Zone logic
+		var roePnlPct float64 // Will hold ROE % for display
+
 		if currentPos.EntryPrice > 0 {
-			var rawPnlPct float64
 			if currentPos.PositionAmt > 0 { // Long position
-				rawPnlPct = ((currentPos.MarkPrice - currentPos.EntryPrice) / currentPos.EntryPrice) * 100
+				pnlPct = ((currentPos.MarkPrice - currentPos.EntryPrice) / currentPos.EntryPrice) * 100
 			} else { // Short position
-				rawPnlPct = ((currentPos.EntryPrice - currentPos.MarkPrice) / currentPos.EntryPrice) * 100
+				pnlPct = ((currentPos.EntryPrice - currentPos.MarkPrice) / currentPos.EntryPrice) * 100
 			}
 
-			// Apply leverage to get ROE
-			// FIX: Use RAW price percentage for noise zone checks
-			// (Previous bug multiplied by leverage, causing -1.5% noise floor to trigger instantly)
-			pnlPct = rawPnlPct
+			// Calculate ROE for display purposes
+			leverage := float64(currentPos.Leverage)
+			if leverage < 1 {
+				leverage = 1
+			}
+			roePnlPct = pnlPct * leverage
 		}
 
 		// SMART LOSS MANAGEMENT V3: Stricter protection against premature exits
@@ -1083,7 +1088,8 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		// Estimate P&L before closing (for logging)
 		estimatedPnL := currentPos.UnrealizedProfit
 
-		log.Printf("[%s][%s] Closing %s position: %.4f (held for %v, estimated profit: $%.2f = %.2f%%)", e.name, symbol, side, currentPos.PositionAmt, holdDuration, estimatedPnL, pnlPct)
+		log.Printf("[%s][%s] Closing %s position: %.4f (held for %v, estimated profit: $%.2f = %.2f%% ROE)",
+			e.name, symbol, side, currentPos.PositionAmt, holdDuration, estimatedPnL, roePnlPct)
 		closeOrder, err := e.binance.ClosePosition(ctx, symbol, currentPos.PositionAmt)
 		if err != nil {
 			return 0, fmt.Errorf("failed to close position: %w", err)
@@ -1296,17 +1302,32 @@ func (e *Engine) buildDecisionContext(ctx context.Context) *decision.Context {
 		}
 	}
 
+	// Get noise zone config from strategy
+	noiseZoneLower := -1.5 // default
+	noiseZoneUpper := 1.5  // default
+	if e.strategy != nil {
+		rc := e.strategy.Config.RiskControl
+		if rc.NoiseZoneLowerBound != 0 {
+			noiseZoneLower = rc.NoiseZoneLowerBound
+		}
+		if rc.NoiseZoneUpperBound != 0 {
+			noiseZoneUpper = rc.NoiseZoneUpperBound
+		}
+	}
+
 	return &decision.Context{
-		CurrentTime:     time.Now().Format(time.RFC3339),
-		RuntimeMinutes:  int(time.Since(e.startTime).Minutes()),
-		CallCount:       e.callCount,
-		Account:         accountInfo,
-		Positions:       positions,
-		CandidateCoins:  candidateCoins,
-		BTCETHLeverage:  btcEthLeverage,
-		AltcoinLeverage: altcoinLeverage,
-		BTCETHPosRatio:  btcEthPosRatio,
-		AltcoinPosRatio: altcoinPosRatio,
+		CurrentTime:         time.Now().Format(time.RFC3339),
+		RuntimeMinutes:      int(time.Since(e.startTime).Minutes()),
+		CallCount:           e.callCount,
+		Account:             accountInfo,
+		Positions:           positions,
+		CandidateCoins:      candidateCoins,
+		BTCETHLeverage:      btcEthLeverage,
+		AltcoinLeverage:     altcoinLeverage,
+		BTCETHPosRatio:      btcEthPosRatio,
+		AltcoinPosRatio:     altcoinPosRatio,
+		NoiseZoneLowerBound: noiseZoneLower,
+		NoiseZoneUpperBound: noiseZoneUpper,
 	}
 }
 
@@ -2281,11 +2302,14 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Calculate current P&L % (Leveraged ROE) - matches Close logic
-		// This ensures Noise Zone, Trailing Stop, and Smart Loss thresholds work on Equity %
-		var pnlPct float64
+		// Calculate P&L percentages
+		// OPTION B: Split Logic
+		// 1. rawPnlPct (Price Move): Used for Smart Loss (don't cut on noise)
+		// 2. roePnlPct (Equity Move): Used for Trailing Stop & Drawdown (protect actual equity)
+		var rawPnlPct float64
+		var roePnlPct float64
+
 		if pos.EntryPrice > 0 {
-			var rawPnlPct float64
 			if pos.PositionAmt > 0 {
 				rawPnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * 100
 			} else {
@@ -2293,9 +2317,11 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			}
 
 			// Apply leverage to get ROE
-			// FIX: Use RAW price percentage for risk monitoring to match SL/TP and Noise Zone thresholds
-			// (Previous bug multiplied by leverage, causing tiny moves to trigger -1.5% thresholds)
-			pnlPct = rawPnlPct
+			leverage := float64(pos.Leverage)
+			if leverage < 1 {
+				leverage = 1
+			}
+			roePnlPct = rawPnlPct * leverage
 		}
 
 		side := "LONG"
@@ -2306,7 +2332,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		holdDuration := e.GetHoldDuration(pos.Symbol, side)
 
 		// =====================================================================
-		// 1. TRAILING STOP LOSS - Lock in profits
+		// 1. TRAILING STOP LOSS - Lock in profits (Uses ROE %)
 		// =====================================================================
 		if rc.EnableTrailingStop {
 			// activatePct: Set to 0 to activate immediately from entry (aggressive)
@@ -2318,8 +2344,8 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				trailDistPct = 0.5
 			}
 
-			// Update and get peak P&L
-			e.UpdatePeakPnL(pos.Symbol, side, pnlPct)
+			// Update and get peak P&L (Using ROE)
+			e.UpdatePeakPnL(pos.Symbol, side, roePnlPct)
 			peakPnL := e.GetPeakPnL(pos.Symbol, side)
 
 			// Check if trailing stop should activate
@@ -2328,15 +2354,9 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				// Calculate trailing stop level
 				trailingStopLevel := peakPnL - trailDistPct
 
-				// CRITICAL FIX: Only trigger TSL if we've actually been in profit
-				// Without this check, if activatePct=0 and price immediately drops 0.5%,
-				// TSL would trigger at a LOSS (peak=0%, trail=-0.5%, current=-0.5% <= -0.5%)
-				//
-				// The fix: TSL should only close if trailingStopLevel > 0
-				// This ensures we're locking in actual profits, not just noise losses
-				if pnlPct <= trailingStopLevel && trailingStopLevel > 0 {
-					log.Printf("[%s][%s] 📉 TRAILING STOP TRIGGERED: Peak=%.2f%%, Current=%.2f%%, TrailStop=%.2f%%",
-						e.name, pos.Symbol, peakPnL, pnlPct, trailingStopLevel)
+				if roePnlPct <= trailingStopLevel {
+					log.Printf("[%s][%s] 📉 TRAILING STOP TRIGGERED: Peak=%.2f%%, Current=%.2f%%, TrailStop=%.2f%% (ROE)",
+						e.name, pos.Symbol, peakPnL, roePnlPct, trailingStopLevel)
 
 					if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
 						log.Printf("[%s][%s] Failed to close position (trailing stop): %v", e.name, pos.Symbol, err)
@@ -2368,7 +2388,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
 					log.Printf("[%s][%s] Failed to close position (max hold): %v", e.name, pos.Symbol, err)
 				} else {
-					log.Printf("[%s][%s] ✅ Closed position due to max hold duration. PnL: %.2f%%", e.name, pos.Symbol, pnlPct)
+					log.Printf("[%s][%s] ✅ Closed position due to max hold duration. PnL: %.2f%% (ROE)", e.name, pos.Symbol, roePnlPct)
 					e.clearPositionTracking(pos.Symbol, side)
 					e.cancelBracketOrders(ctx, pos.Symbol)
 				}
@@ -2377,7 +2397,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		}
 
 		// =====================================================================
-		// 3. SMART LOSS CUT - Cut positions underwater too long
+		// 3. SMART LOSS CUT - Cut positions underwater too long (Uses RAW %)
 		// =====================================================================
 		if rc.EnableSmartLossCut {
 			smartLossMins := rc.SmartLossCutMins
@@ -2392,14 +2412,16 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			smartLossDuration := time.Duration(smartLossMins) * time.Minute
 
 			// Only trigger if both conditions are met: underwater AND held long enough
-			if pnlPct <= smartLossPct && holdDuration >= smartLossDuration {
-				log.Printf("[%s][%s] 🔪 SMART LOSS CUT: Position at %.2f%% (threshold: %.2f%%) for %v (threshold: %v). Cutting losses.",
-					e.name, pos.Symbol, pnlPct, smartLossPct, holdDuration.Round(time.Minute), smartLossDuration)
+			// USES RAW P&L: We want to allow -1% Raw (approx -20% ROE) before giving up
+			// If we used ROE, -1% would trigger almost instantly on any noise
+			if rawPnlPct <= smartLossPct && holdDuration >= smartLossDuration {
+				log.Printf("[%s][%s] 🔪 SMART LOSS CUT: Position at %.2f%% Raw (ROE: %.2f%%) < %.2f%% for %v. Cutting losses.",
+					e.name, pos.Symbol, rawPnlPct, roePnlPct, smartLossPct, holdDuration.Round(time.Minute))
 
 				if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
 					log.Printf("[%s][%s] Failed to close position (smart loss cut): %v", e.name, pos.Symbol, err)
 				} else {
-					log.Printf("[%s][%s] ✅ Cut losing position. Loss: %.2f%%", e.name, pos.Symbol, pnlPct)
+					log.Printf("[%s][%s] ✅ Cut losing position. Loss: %.2f%% (Raw)", e.name, pos.Symbol, rawPnlPct)
 					e.clearPositionTracking(pos.Symbol, side)
 					e.cancelBracketOrders(ctx, pos.Symbol)
 				}
@@ -2408,7 +2430,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		}
 
 		// =====================================================================
-		// 4. DRAWDOWN PROTECTION (Original logic) - SKIPPED in Simple Mode
+		// 4. DRAWDOWN PROTECTION (Uses ROE %)
 		// =====================================================================
 		// In Simple Mode, we skip ONLY this automatic drawdown protection
 		// (features 1-3 above are explicitly enabled by user, so they still run)
@@ -2416,24 +2438,25 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Update peak P&L
-		e.UpdatePeakPnL(pos.Symbol, side, pnlPct)
+		// Update peak P&L (Using ROE)
+		e.UpdatePeakPnL(pos.Symbol, side, roePnlPct)
 		peakPnL := e.GetPeakPnL(pos.Symbol, side)
 
-		// Only apply drawdown protection if we were profitable
+		// Only apply drawdown protection if we were profitable (in ROE terms)
 		if peakPnL < minProfitForDrawdown {
 			continue
 		}
 
 		// Calculate drawdown from peak (relative percentage, matching NOFX)
+		// Using ROE values
 		var drawdownPct float64
-		if peakPnL > 0 && pnlPct < peakPnL {
-			drawdownPct = ((peakPnL - pnlPct) / peakPnL) * 100
+		if peakPnL > 0 && roePnlPct < peakPnL {
+			drawdownPct = ((peakPnL - roePnlPct) / peakPnL) * 100
 		}
 
 		if drawdownPct >= drawdownThreshold {
-			log.Printf("[%s][%s] Drawdown alert: Peak=%.2f%%, Current=%.2f%%, Drawdown=%.2f%% >= %.2f%%",
-				e.name, pos.Symbol, peakPnL, pnlPct, drawdownPct, drawdownThreshold)
+			log.Printf("[%s][%s] Drawdown alert: Peak=%.2f%%, Current=%.2f%%, Drawdown=%.2f%% >= %.2f%% (ROE)",
+				e.name, pos.Symbol, peakPnL, roePnlPct, drawdownPct, drawdownThreshold)
 
 			// Close the position
 			log.Printf("[%s][%s] Closing position due to drawdown protection", e.name, pos.Symbol)

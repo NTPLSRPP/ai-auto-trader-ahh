@@ -325,9 +325,9 @@ Confidence = "How sure are you about YOUR recommended action?"
 - <60: Market is confusing, definitely wait
 
 **For CLOSE:**
-- 95-100: Only use for significant losses (> -1.5%) or significant profits (> +1.5%)
-- <95: DO NOT CLOSE - trust your Stop Loss order
-- NEVER close a position that is -1% to +1% (this is normal market noise!)
+- When you think a position should be closed, provide clear reasoning
+- Explain WHY you believe the thesis has failed or profits should be locked
+- The system will evaluate your reasoning and confidence level
 
 ## ACTION DEFINITIONS
 
@@ -360,21 +360,20 @@ Confidence = "How sure are you about YOUR recommended action?"
 
 If you have an existing position:
 
-⚠️ **ALMOST ALWAYS RECOMMEND HOLD** for existing positions!
+**Provide your analysis FIRST, then your recommendation**
 
-The SL/TP orders on the exchange will handle exits. You should only recommend CLOSE in rare cases:
+When considering CLOSE, always explain:
+1. What has changed since entry?
+2. Has the trade thesis been invalidated?
+3. What specific signals support closing?
 
-✅ CLOSE is OK when:
-- Loss > 1.5% AND momentum has completely reversed
-- Profit > 1.5% AND you see strong reversal signals
+✅ CLOSE is appropriate when:
+- Trade thesis is clearly invalidated (e.g., support/resistance broken)
+- Momentum has completely reversed against position
+- Significant profits at risk of reversal
 
-❌ NEVER CLOSE when:
-- Position is between -1.5% and +1.5% (NOISE ZONE)
-- Position was opened less than 10 minutes ago
-- You're just "uncertain" - that's not a reason to close
-
-**Default behavior for existing positions: HOLD**
-Trust your stop loss. It's there for a reason.`
+For close decisions: Provide clear reasoning about why the position should be closed.
+The system will evaluate your insight and confidence level.`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
@@ -413,7 +412,7 @@ Trust your stop loss. It's there for a reason.`
 }
 
 // GetTradingDecisionSimple uses a minimal prompt like v1.4.7
-// This is used when Simple Mode is enabled - less overthinking, trust SL/TP
+// This is used when Simple Mode is enabled - less overthinking
 func (c *Client) GetTradingDecisionSimple(marketData string) (*TradingDecision, string, error) {
 	systemPrompt := `You are a cryptocurrency futures trader. Make clear BUY, SELL, or HOLD decisions.
 
@@ -437,7 +436,7 @@ SIMPLE RULES:
 2. Use momentum confirmation (MACD)
 3. Avoid extreme RSI (>70 or <30)
 4. If unsure, HOLD
-5. For existing positions: almost always HOLD, trust your SL/TP`
+5. For existing positions: provide your analysis first if you think action is needed`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},

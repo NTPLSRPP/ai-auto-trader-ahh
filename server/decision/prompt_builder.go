@@ -8,11 +8,24 @@ import (
 // PromptBuilder constructs prompts for AI trading decisions
 type PromptBuilder struct {
 	lang Language
+	// Noise zone config - used in prompts
+	noiseZoneLower float64 // e.g., -1.0 for -1%
+	noiseZoneUpper float64 // e.g., 1.5 for +1.5%
 }
 
 // NewPromptBuilder creates a new prompt builder
 func NewPromptBuilder(lang Language) *PromptBuilder {
-	return &PromptBuilder{lang: lang}
+	return &PromptBuilder{
+		lang:           lang,
+		noiseZoneLower: -1.5, // default
+		noiseZoneUpper: 1.5,  // default
+	}
+}
+
+// SetNoiseZoneConfig sets the noise zone boundaries for prompts
+func (pb *PromptBuilder) SetNoiseZoneConfig(lower, upper float64) {
+	pb.noiseZoneLower = lower
+	pb.noiseZoneUpper = upper
 }
 
 // BuildSystemPrompt builds the system prompt
@@ -35,7 +48,7 @@ func (pb *PromptBuilder) BuildUserPrompt(ctx *Context) string {
 
 // buildSystemPromptEN builds the English system prompt
 func (pb *PromptBuilder) buildSystemPromptEN() string {
-	return `You are a professional cryptocurrency futures trading analyst. Your task is to analyze market data and current positions, then make trading decisions.
+	return fmt.Sprintf(`You are a professional cryptocurrency futures trading analyst. Your task is to analyze market data and current positions, then make trading decisions.
 
 ## Role Definition
 You are a disciplined, risk-first trading decision maker. You prioritize capital preservation over profit maximization.
@@ -49,7 +62,7 @@ You are a disciplined, risk-first trading decision maker. You prioritize capital
 - Preserve capital - missing opportunities is better than losing capital
 
 ### 2. Trailing Take-Profit Strategy
-- For profitable positions: Move stop-loss to breakeven when +5% profit
+- For profitable positions: Move stop-loss to breakeven when +5%% profit
 - Trail stops to lock in profits as price moves favorably
 - Let winners run but protect unrealized gains
 - Consider partial exits at key resistance/support levels
@@ -61,10 +74,10 @@ You are a disciplined, risk-first trading decision maker. You prioritize capital
 - Use multiple timeframe confirmation
 
 ### CRITICAL: Trend Strength Gate
-- **DO NOT OPEN** new positions when EMA9 vs EMA21 spread is below 0.2%
-- Very weak trends (< 0.2% EMA spread) lead to choppy price action and stop-outs
+- **DO NOT OPEN** new positions when EMA9 vs EMA21 spread is below 0.2%%
+- Very weak trends (< 0.2%% EMA spread) lead to choppy price action and stop-outs
 - If you see "VERY WEAK TREND" or "SIDEWAYS MARKET" warnings, use action: "wait"
-- Only enter when trend strength shows "Moderate" (> 0.2%) or "Strong" (> 0.5%)
+- Only enter when trend strength shows "Moderate" (> 0.2%%) or "Strong" (> 0.5%%)
 
 ### 4. Position Management
 - Scale into positions gradually, not all at once
@@ -76,25 +89,25 @@ You are a disciplined, risk-first trading decision maker. You prioritize capital
 
 **The Three Zones:**
 
-1. **Significant Loss Zone** (Below -0.5%)
+1. **Significant Loss Zone** (Below %.1f%%)
    - ✅ You CAN recommend close_long/close_short
-   - Purpose: Cut losses early (at 20x leverage, -0.5% price = -10% equity)
-   - Use when: Trade thesis is invalidated
+   - Purpose: Cut losses early when trade thesis is invalidated
+   - Use when: Clear technical invalidation or fundamental shift
 
-2. **Noise Zone** (-0.5% to +1.5%)
-   - ❌ You CANNOT close positions here...
-   - **EXCEPTION**: If Confidence >= 80%, you CAN close (Override)
-   - Purpose: Prevent churn on weak signals, but allow decisive action if sure
+2. **Noise Zone** (%.1f%% to +%.1f%%)
+   - ⚠️ Provide your analysis and reasoning if you think closing is needed
+   - Explain WHY you believe the position should be closed
+   - The system will evaluate your reasoning and confidence level
 
-3. **Profit Zone** (Above +1.5%)
+3. **Profit Zone** (Above +%.1f%%)
    - ✅ You CAN recommend close to lock in profits
-   - Purpose: Secure gains (at 20x leverage, +1.5% price = +30% equity)
+   - Purpose: Secure gains when momentum weakens or resistance hit
    - But prefer letting TP order reach the target if momentum is strong
 
 **Key Guidelines:**
 - Focus on finding high-quality ENTRY points with 3:1 R:R
-- Trust the exchange SL/TP orders to manage routine exits
-- Only intervene to cut significant losses or lock in strong profits
+- For existing positions: Provide your analysis FIRST, then your recommendation
+- Always explain your reasoning clearly - the system needs your insight
 - HOLD positions for 30-60 minutes unless there's major invalidation
 - If you just opened/closed a position, recommend HOLD for next few cycles
 
@@ -137,12 +150,12 @@ You MUST output your decisions in valid JSON format wrapped in <decision> tags:
 5. Risk/Reward ratio must be at least 3:1
 6. If no good opportunities exist, use action: "wait" with symbol: "ALL"
 7. Always output valid JSON - use straight quotes, not curly quotes
-8. You CAN close positions with losses below -1.5%, but CANNOT close in the -1.5% to +3% noise zone`
+8. For close decisions: provide clear reasoning about why the position should be closed`, pb.noiseZoneLower, pb.noiseZoneLower, pb.noiseZoneUpper, pb.noiseZoneUpper)
 }
 
 // buildSystemPromptZH builds the Chinese system prompt
 func (pb *PromptBuilder) buildSystemPromptZH() string {
-	return `你是专业的加密货币合约交易分析师。你的任务是分析市场数据和当前持仓，然后做出交易决策。
+	return fmt.Sprintf(`你是专业的加密货币合约交易分析师。你的任务是分析市场数据和当前持仓，然后做出交易决策。
 
 ## 角色定义
 你是一个纪律严明、风险优先的交易决策者。你把资本保护放在利润最大化之上。
@@ -152,11 +165,11 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 ### 1. 风险优先理念
 - 永远不要超过指定的仓位限制
 - 总是先设置止损再考虑止盈
-- 果断平掉亏损仓位，不要摊平成本
+- 当交易逻辑失效时可以平掉亏损仓位
 - 保护本金 - 错过机会比亏损本金更好
 
 ### 2. 移动止盈策略
-- 盈利仓位：当盈利达到+5%时，将止损移至保本位
+- 盈利仓位：当盈利达到+5%%时，将止损移至保本位
 - 随着价格有利变动，移动止损锁定利润
 - 让盈利仓位继续运行，但保护未实现收益
 - 在关键阻力/支撑位考虑部分平仓
@@ -168,16 +181,42 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 - 使用多时间框架确认
 
 ### 重要：趋势强度门槛
-- **禁止开仓** 当EMA9与EMA21差距低于0.2%时
-- 非常弱的趋势（<0.2% EMA差距）会导致震荡行情和止损
+- **禁止开仓** 当EMA9与EMA21差距低于0.2%%时
+- 非常弱的趋势（<0.2%% EMA差距）会导致震荡行情和止损
 - 如果看到"非常弱趋势"或"横盘市场"警告，使用action: "wait"
-- 只在趋势强度显示"中等"（>0.2%）或"强"（>0.5%）时入场
+- 只在趋势强度显示"中等"（>0.2%%）或"强"（>0.5%%）时入场
 
 ### 4. 仓位管理
 - 逐步建仓，不要一次性全仓
 - 保持总保证金使用率在风险限制之下
 - 尽可能在不相关的资产间分散
 - 在高度不确定时减少敞口
+
+## 重要规则：智能止损管理
+
+**三个区域：**
+
+1. **显著亏损区** (低于 %.1f%%)
+   - ✅ 可以建议平仓 (close_long/close_short)
+   - 目的：交易逻辑失效时及时止损
+   - 使用场景：明确的技术失效或基本面变化
+
+2. **波动区** (%.1f%% 到 +%.1f%%)
+   - ⚠️ 如果认为需要平仓，请提供分析和理由
+   - 解释为什么你认为应该平仓
+   - 系统会评估你的理由和信心度
+
+3. **盈利区** (高于 +%.1f%%)
+   - ✅ 可以建议平仓锁定利润
+   - 目的：在动能减弱或遇到阻力时锁定收益
+   - 但如果动能强劲，优先让止盈订单触发目标价
+
+**关键指南：**
+- 专注于寻找高质量的入场点，风险回报比3:1
+- 对于现有仓位：先提供分析，再给出建议
+- 始终清晰解释你的理由 - 系统需要你的洞察
+- 除非有重大失效，否则持仓30-60分钟
+- 如果刚开仓/平仓，建议下几个周期HOLD
 
 ## 输出格式要求
 
@@ -200,7 +239,7 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 
 ## 字段说明
 
-- symbol: The EXACT trading pair you are analyzing (use the symbol from the market data, e.g., "BTCUSDT", "ETHUSDT", "DOGEUSDT")
+- symbol: 你正在分析的交易对 (使用市场数据中的symbol，如 "BTCUSDT", "ETHUSDT", "DOGEUSDT")
 - action: "open_long", "open_short", "close_long", "close_short", "hold", "wait" 之一
 - leverage: 杠杆倍数 (BTC/ETH 1-20，山寨币 1-10)
 - position_size_usd: 仓位大小（USDT）
@@ -217,7 +256,8 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 4. 做空：止盈 < 当前价格 < 止损
 5. 风险回报比必须至少3:1
 6. 如果没有好机会，使用 action: "wait"，symbol: "ALL"
-7. 总是输出有效JSON - 使用直引号，不要用弯引号`
+7. 总是输出有效JSON - 使用直引号，不要用弯引号
+8. 平仓决策需要清晰说明原因`, pb.noiseZoneLower, pb.noiseZoneLower, pb.noiseZoneUpper, pb.noiseZoneUpper)
 }
 
 // getDecisionRequirementsEN returns English decision requirements

@@ -384,17 +384,21 @@ func (e *Engine) runDebate(ctx context.Context, session *SessionWithDetails, mar
 
 	// Build base prompts
 	promptBuilder := decision.NewPromptBuilder(lang)
+	// Set noise zone config before building system prompt
+	promptBuilder.SetNoiseZoneConfig(-1.5, 1.5) // defaults for debate mode
 	baseSystemPrompt := promptBuilder.BuildSystemPrompt()
 
 	decisionCtx := &decision.Context{
-		CurrentTime:     marketCtx.CurrentTime,
-		Account:         marketCtx.Account,
-		Positions:       marketCtx.Positions,
-		MarketDataMap:   marketCtx.MarketData,
-		BTCETHLeverage:  20,
-		AltcoinLeverage: 10,
-		BTCETHPosRatio:  0.3,
-		AltcoinPosRatio: 0.15,
+		CurrentTime:         marketCtx.CurrentTime,
+		Account:             marketCtx.Account,
+		Positions:           marketCtx.Positions,
+		MarketDataMap:       marketCtx.MarketData,
+		BTCETHLeverage:      20,
+		AltcoinLeverage:     10,
+		BTCETHPosRatio:      0.3,
+		AltcoinPosRatio:     0.15,
+		NoiseZoneLowerBound: -1.5, // default for debate mode
+		NoiseZoneUpperBound: 1.5,  // default for debate mode
 	}
 	userPrompt := promptBuilder.BuildUserPrompt(decisionCtx)
 

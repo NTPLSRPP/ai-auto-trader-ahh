@@ -151,6 +151,10 @@ type Context struct {
 	BTCETHPosRatio  float64                  `json:"-"` // Max position ratio for BTC/ETH
 	AltcoinPosRatio float64                  `json:"-"` // Max position ratio for altcoins
 	Timeframes      []string                 `json:"-"`
+
+	// Noise Zone Config - passed to AI prompts
+	NoiseZoneLowerBound float64 `json:"-"` // e.g., -1.0 means below -1% is significant loss
+	NoiseZoneUpperBound float64 `json:"-"` // e.g., 1.5 means above +1.5% is profit zone
 }
 
 // ValidationConfig holds validation parameters

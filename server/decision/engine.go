@@ -45,6 +45,11 @@ func (e *Engine) MakeDecision(ctx *Context) (*FullDecision, error) {
 	// Update validation config from context
 	e.UpdateValidationFromContext(ctx)
 
+	// Set noise zone config on prompt builder from context
+	if ctx.NoiseZoneLowerBound != 0 || ctx.NoiseZoneUpperBound != 0 {
+		e.promptBuilder.SetNoiseZoneConfig(ctx.NoiseZoneLowerBound, ctx.NoiseZoneUpperBound)
+	}
+
 	// Build prompts
 	systemPrompt := e.promptBuilder.BuildSystemPrompt()
 	userPrompt := e.promptBuilder.BuildUserPrompt(ctx)
