@@ -65,14 +65,13 @@ func validateOpeningDecision(d *Decision, cfg *ValidationConfig) error {
 		maxPositionValue = cfg.AccountEquity * posRatio
 	}
 
-	// Leverage validation
+	// Leverage validation - REJECT instead of auto-adjust to prevent silent risk changes
 	if d.Leverage <= 0 {
 		return fmt.Errorf("leverage must be greater than 0: %d", d.Leverage)
 	}
 	if d.Leverage > maxLeverage {
-		log.Printf("WARNING: %s leverage exceeded (%dx > %dx), auto-adjusting to limit %dx",
-			d.Symbol, d.Leverage, maxLeverage, maxLeverage)
-		d.Leverage = maxLeverage
+		return fmt.Errorf("%s leverage %dx exceeds maximum %dx - rejecting trade to prevent unintended risk",
+			d.Symbol, d.Leverage, maxLeverage)
 	}
 
 	// Position size validation

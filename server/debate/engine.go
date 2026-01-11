@@ -749,9 +749,17 @@ func (e *Engine) determineConsensus(votes []*Vote) []*Decision {
 
 	symbolActions := make(map[string]map[string]*actionData)
 
-	// Aggregate votes
+	// Aggregate votes - filter out low confidence decisions
+	const minConfidenceThreshold = 50 // Minimum confidence to include in consensus
 	for _, vote := range votes {
 		for _, d := range vote.Decisions {
+			// Skip low confidence decisions - they shouldn't influence consensus
+			if d.Confidence < minConfidenceThreshold {
+				log.Printf("[Debate] Skipping low confidence decision: %s %s (confidence: %d%% < %d%%)",
+					d.Symbol, d.Action, d.Confidence, minConfidenceThreshold)
+				continue
+			}
+
 			if symbolActions[d.Symbol] == nil {
 				symbolActions[d.Symbol] = make(map[string]*actionData)
 			}
@@ -760,10 +768,8 @@ func (e *Engine) determineConsensus(votes []*Vote) []*Decision {
 			}
 
 			ad := symbolActions[d.Symbol][d.Action]
+			// Weight by confidence - higher confidence = more influence
 			weight := float64(d.Confidence) / 100.0
-			if weight < 0.5 {
-				weight = 0.5
-			}
 
 			ad.score += weight
 			ad.totalConf += d.Confidence

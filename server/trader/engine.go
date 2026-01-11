@@ -832,32 +832,44 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		log.Printf("[%s][%s] Opening LONG: %.4f @ $%.2f (margin: $%.2f, position: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, actualPositionValue, leverage)
-		if _, err := e.binance.PlaceOrder(ctx, symbol, "BUY", "MARKET", quantity, 0, false); err != nil {
+		openOrder, err := e.binance.PlaceOrder(ctx, symbol, "BUY", "MARKET", quantity, 0, false)
+		if err != nil {
 			return 0, fmt.Errorf("failed to open long: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "LONG")
 
-		// Update positions map immediately to enforce max positions correctly
+		// Use actual fill price from order response, fallback to ticker price
+		entryPrice := ticker.Price
+		filledQty := quantity
+		if openOrder != nil && openOrder.AvgPrice > 0 {
+			entryPrice = openOrder.AvgPrice
+			if openOrder.ExecutedQty > 0 {
+				filledQty = openOrder.ExecutedQty
+			}
+			log.Printf("[%s][%s] LONG filled: price=$%.4f, qty=%.4f", e.name, symbol, entryPrice, filledQty)
+		}
+
+		// Update positions map with actual fill data
 		e.mu.Lock()
 		e.positions[symbol] = &exchange.Position{
 			Symbol:      symbol,
-			PositionAmt: quantity,
-			EntryPrice:  ticker.Price,
-			MarkPrice:   ticker.Price,
+			PositionAmt: filledQty,
+			EntryPrice:  entryPrice,
+			MarkPrice:   entryPrice,
 			Leverage:    leverage,
 		}
 		e.mu.Unlock()
 
-		// Place bracket orders (SL/TP) on exchange
+		// Place bracket orders (SL/TP) on exchange using actual entry price
 		// If trailing stop is enabled, only place SL - let TSL handle profits
 		slPct, tpPct := e.getSLTPPercentages(decision)
 		if slPct > 0 {
 			if e.strategy.Config.RiskControl.EnableTrailingStop {
 				// Only place SL, TSL will handle profit-taking
 				log.Printf("[%s][%s] Trailing stop enabled - placing SL only, TSL will handle profits", e.name, symbol)
-				e.placeStopLossOnly(ctx, symbol, true, ticker.Price, slPct)
+				e.placeStopLossOnly(ctx, symbol, true, entryPrice, slPct)
 			} else if tpPct > 0 {
-				e.placeBracketOrders(ctx, symbol, true, ticker.Price, slPct, tpPct)
+				e.placeBracketOrders(ctx, symbol, true, entryPrice, slPct, tpPct)
 			}
 		}
 
@@ -873,32 +885,44 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 		log.Printf("[%s][%s] Opening SHORT: %.4f @ $%.2f (margin: $%.2f, position: $%.2f, leverage: %dx)",
 			e.name, symbol, quantity, ticker.Price, positionSizeUSD, actualPositionValue, leverage)
-		if _, err := e.binance.PlaceOrder(ctx, symbol, "SELL", "MARKET", quantity, 0, false); err != nil {
+		openOrder, err := e.binance.PlaceOrder(ctx, symbol, "SELL", "MARKET", quantity, 0, false)
+		if err != nil {
 			return 0, fmt.Errorf("failed to open short: %w", err)
 		}
 		e.setPositionFirstSeen(symbol, "SHORT")
 
-		// Update positions map immediately to enforce max positions correctly
+		// Use actual fill price from order response, fallback to ticker price
+		entryPrice := ticker.Price
+		filledQty := quantity
+		if openOrder != nil && openOrder.AvgPrice > 0 {
+			entryPrice = openOrder.AvgPrice
+			if openOrder.ExecutedQty > 0 {
+				filledQty = openOrder.ExecutedQty
+			}
+			log.Printf("[%s][%s] SHORT filled: price=$%.4f, qty=%.4f", e.name, symbol, entryPrice, filledQty)
+		}
+
+		// Update positions map with actual fill data
 		e.mu.Lock()
 		e.positions[symbol] = &exchange.Position{
 			Symbol:      symbol,
-			PositionAmt: -quantity, // Negative for short
-			EntryPrice:  ticker.Price,
-			MarkPrice:   ticker.Price,
+			PositionAmt: -filledQty, // Negative for short
+			EntryPrice:  entryPrice,
+			MarkPrice:   entryPrice,
 			Leverage:    leverage,
 		}
 		e.mu.Unlock()
 
-		// Place bracket orders (SL/TP) on exchange
+		// Place bracket orders (SL/TP) on exchange using actual entry price
 		// If trailing stop is enabled, only place SL - let TSL handle profits
 		slPct, tpPct := e.getSLTPPercentages(decision)
 		if slPct > 0 {
 			if e.strategy.Config.RiskControl.EnableTrailingStop {
 				// Only place SL, TSL will handle profit-taking
 				log.Printf("[%s][%s] Trailing stop enabled - placing SL only, TSL will handle profits", e.name, symbol)
-				e.placeStopLossOnly(ctx, symbol, false, ticker.Price, slPct)
+				e.placeStopLossOnly(ctx, symbol, false, entryPrice, slPct)
 			} else if tpPct > 0 {
-				e.placeBracketOrders(ctx, symbol, false, ticker.Price, slPct, tpPct)
+				e.placeBracketOrders(ctx, symbol, false, entryPrice, slPct, tpPct)
 			}
 		}
 

@@ -111,10 +111,27 @@ func NewBinanceClient(apiKey, secretKey string, testnet bool) *BinanceClient {
 	// Sync time with Binance server
 	client.syncServerTime()
 
+	// Start periodic time sync (every 15 minutes) to prevent drift
+	client.startPeriodicTimeSync()
+
 	// Fetch exchange info for precision data
 	client.fetchExchangeInfo()
 
 	return client
+}
+
+// startPeriodicTimeSync starts a goroutine that syncs server time every 15 minutes
+// This prevents timestamp drift issues during long-running sessions
+func (c *BinanceClient) startPeriodicTimeSync() {
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			c.syncServerTime()
+		}
+	}()
+	log.Printf("[Binance] Periodic time sync started (every 15 minutes)")
 }
 
 // fetchExchangeInfo fetches symbol precision info from Binance
