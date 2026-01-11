@@ -1346,8 +1346,8 @@ export default function Strategies() {
                         </div>
 
                         {/* Noise Zone Protection */}
-                        <div className="space-y-3">
-                          <label className="flex items-start space-x-3 cursor-pointer">
+                        <div className="p-4 rounded-lg bg-violet-400/5 border border-violet-400/20 space-y-3">
+                          <label className="flex items-center gap-3 cursor-pointer">
                             <Checkbox
                               checked={editingStrategy.config.risk_control.enable_noise_zone_protection ?? true}
                               onCheckedChange={(c) => setEditingStrategy({
@@ -1360,15 +1360,15 @@ export default function Strategies() {
                                   }
                                 }
                               })}
-                              className="mt-0.5"
+                              className="data-[state=checked]:bg-violet-400 data-[state=checked]:border-violet-400"
                             />
                             <div>
-                              <span className="font-medium text-sm">Noise Zone Protection</span>
+                              <span className="font-medium text-violet-300">Noise Zone Protection</span>
                               <p className="text-xs text-muted-foreground">Block AI from closing positions too early in the "noise zone"</p>
                             </div>
                           </label>
-                          {(editingStrategy.config.risk_control.enable_noise_zone_protection ?? true) && (
-                            <div className="grid grid-cols-2 gap-3 pl-9">
+                          {editingStrategy.config.risk_control.enable_noise_zone_protection && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                               <div className="space-y-2">
                                 <Label className="text-xs">Lower Bound %</Label>
                                 <Input
