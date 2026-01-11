@@ -985,12 +985,10 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 				rawPnlPct = ((currentPos.EntryPrice - currentPos.MarkPrice) / currentPos.EntryPrice) * 100
 			}
 
-			// Apply leverage to get ROE (Return on Equity)
-			leverage := float64(currentPos.Leverage)
-			if leverage < 1 {
-				leverage = 1
-			}
-			pnlPct = rawPnlPct * leverage
+			// Apply leverage to get ROE
+			// FIX: Use RAW price percentage for noise zone checks
+			// (Previous bug multiplied by leverage, causing -1.5% noise floor to trigger instantly)
+			pnlPct = rawPnlPct
 		}
 
 		// SMART LOSS MANAGEMENT V3: Stricter protection against premature exits
@@ -2295,11 +2293,9 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			}
 
 			// Apply leverage to get ROE
-			leverage := float64(pos.Leverage)
-			if leverage < 1 {
-				leverage = 1
-			}
-			pnlPct = rawPnlPct * leverage
+			// FIX: Use RAW price percentage for risk monitoring to match SL/TP and Noise Zone thresholds
+			// (Previous bug multiplied by leverage, causing tiny moves to trigger -1.5% thresholds)
+			pnlPct = rawPnlPct
 		}
 
 		side := "LONG"
