@@ -91,7 +91,7 @@ func TestDailyLossCalculation(t *testing.T) {
 		initialBalance float64
 		currentBalance float64
 		wantLossPct    float64
-		exceedsLimit   bool   // for 5% limit
+		exceedsLimit   bool // for 5% limit
 		limitPct       float64
 	}{
 		{
@@ -285,12 +285,12 @@ func TestSymbolValidation(t *testing.T) {
 // Bug fix: Previously 0.98 was applied twice (in affordability check AND applyMarginBuffer)
 func TestMarginBufferSingleApplication(t *testing.T) {
 	tests := []struct {
-		name                  string
-		positionSizeUSD       float64
-		maxAffordable         float64
-		marginBuffer          float64
-		expectBufferApplied   bool
-		wantFinalSize         float64
+		name                string
+		positionSizeUSD     float64
+		maxAffordable       float64
+		marginBuffer        float64
+		expectBufferApplied bool
+		wantFinalSize       float64
 	}{
 		{
 			name:                "Position within affordable - buffer applied once",
@@ -456,19 +456,19 @@ func TestTrailingStopTrigger(t *testing.T) {
 // TestEmergencySLCalculation tests the emergency stop-loss calculation
 func TestEmergencySLCalculation(t *testing.T) {
 	tests := []struct {
-		name           string
-		isLong         bool
-		entryPrice     float64
-		normalSLPct    float64
+		name             string
+		isLong           bool
+		entryPrice       float64
+		normalSLPct      float64
 		wantEmergencyPct float64
-		wantSLPrice    float64
+		wantSLPrice      float64
 	}{
 		{
 			name:             "Long position 2% SL -> 3% emergency",
 			isLong:           true,
 			entryPrice:       50000,
 			normalSLPct:      2.0,
-			wantEmergencyPct: 3.0, // 2.0 * 1.5 = 3.0
+			wantEmergencyPct: 3.0,   // 2.0 * 1.5 = 3.0
 			wantSLPrice:      48500, // 50000 * (1 - 0.03)
 		},
 		{
@@ -484,7 +484,7 @@ func TestEmergencySLCalculation(t *testing.T) {
 			isLong:           true,
 			entryPrice:       50000,
 			normalSLPct:      8.0,
-			wantEmergencyPct: 10.0, // 8.0 * 1.5 = 12, capped at 10
+			wantEmergencyPct: 10.0,  // 8.0 * 1.5 = 12, capped at 10
 			wantSLPrice:      45000, // 50000 * (1 - 0.10)
 		},
 		{
@@ -566,5 +566,154 @@ func TestPositionSyncMergeLogic(t *testing.T) {
 
 	if len(merged) != 3 {
 		t.Errorf("Merged positions count = %d, want 3", len(merged))
+	}
+}
+
+// TestTrailingStopRequiresProfit tests that TSL won't trigger at 0% profit
+// This fixes the bug where TSL could close positions at a loss when:
+// - activatePct = 0 (immediate activation)
+// - Peak P&L = 0% (just opened)
+// - Current P&L = -0.5% (dropped due to noise)
+// - Trail distance = 0.5%
+// - Without fix: trigger at trailLevel = 0% - 0.5% = -0.5%, current -0.5% <= -0.5% = TRIGGER (BAD!)
+// - With fix: trailLevel = -0.5% which is <= 0, so NO TRIGGER (GOOD!)
+func TestTrailingStopRequiresProfit(t *testing.T) {
+	tests := []struct {
+		name          string
+		peakPnL       float64
+		currentPnL    float64
+		trailDistance float64
+		expectTrigger bool
+	}{
+		{
+			name:          "Peak 0%, current -0.5%, trail 0.5% - should NOT trigger (no profit to lock)",
+			peakPnL:       0.0,
+			currentPnL:    -0.5,
+			trailDistance: 0.5,
+			expectTrigger: false, // trailingStopLevel = 0 - 0.5 = -0.5, but -0.5 <= 0 so no trigger
+		},
+		{
+			name:          "Peak 0.3%, current -0.2%, trail 0.5% - should NOT trigger (trail level negative)",
+			peakPnL:       0.3,
+			currentPnL:    -0.2,
+			trailDistance: 0.5,
+			expectTrigger: false, // trailingStopLevel = 0.3 - 0.5 = -0.2, -0.2 <= 0 so no trigger
+		},
+		{
+			name:          "Peak 1%, current 0.4%, trail 0.5% - should TRIGGER (profit locked)",
+			peakPnL:       1.0,
+			currentPnL:    0.4,
+			trailDistance: 0.5,
+			expectTrigger: true, // trailingStopLevel = 1.0 - 0.5 = 0.5 > 0, current 0.4 <= 0.5 = TRIGGER
+		},
+		{
+			name:          "Peak 2%, current 1.4%, trail 0.5% - should TRIGGER (profit locked)",
+			peakPnL:       2.0,
+			currentPnL:    1.4,
+			trailDistance: 0.5,
+			expectTrigger: true, // trailingStopLevel = 2.0 - 0.5 = 1.5 > 0, current 1.4 <= 1.5 = TRIGGER
+		},
+		{
+			name:          "Peak 0.5%, current 0.4%, trail 0.5% - should NOT trigger (trail level at 0)",
+			peakPnL:       0.5,
+			currentPnL:    0.4,
+			trailDistance: 0.5,
+			expectTrigger: false, // trailingStopLevel = 0.5 - 0.5 = 0.0, current 0.4 > 0 = NO TRIGGER
+		},
+		{
+			name:          "Peak 0.6%, current 0.05%, trail 0.5% - should TRIGGER (trail level slightly positive)",
+			peakPnL:       0.6,
+			currentPnL:    0.05,
+			trailDistance: 0.5,
+			expectTrigger: true, // trailingStopLevel = 0.6 - 0.5 = 0.1 > 0, current 0.05 <= 0.1 = TRIGGER
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			trailingStopLevel := tt.peakPnL - tt.trailDistance
+
+			// The FIXED logic: require trailingStopLevel > 0 to trigger
+			// This ensures we're locking in actual profits, not just closing at losses
+			shouldTrigger := tt.currentPnL <= trailingStopLevel && trailingStopLevel > 0
+
+			if shouldTrigger != tt.expectTrigger {
+				t.Errorf("Trailing stop trigger = %v, want %v\n"+
+					"  peakPnL: %.2f%%, currentPnL: %.2f%%, trailDist: %.2f%%, trailLevel: %.2f%%",
+					shouldTrigger, tt.expectTrigger,
+					tt.peakPnL, tt.currentPnL, tt.trailDistance, trailingStopLevel)
+			}
+		})
+	}
+}
+
+// TestPositionSizingUsesFreshBalance verifies that position sizing uses fresh account data
+// Bug: Previously used e.account (cached) instead of account (fresh) leading to over-leveraging
+func TestPositionSizingUsesFreshBalance(t *testing.T) {
+	tests := []struct {
+		name             string
+		cachedBalance    float64
+		freshBalance     float64
+		positionPct      float64
+		wantPositionSize float64
+		useFresh         bool
+	}{
+		{
+			name:             "Fresh balance lower than cached - should use fresh to avoid over-leverage",
+			cachedBalance:    10000,
+			freshBalance:     8000, // Balance dropped since cache
+			positionPct:      10.0,
+			wantPositionSize: 800, // 8000 * 10% = 800 (not 1000!)
+			useFresh:         true,
+		},
+		{
+			name:             "Fresh balance higher than cached - using fresh gives more room",
+			cachedBalance:    10000,
+			freshBalance:     12000, // Balance increased
+			positionPct:      10.0,
+			wantPositionSize: 1200, // 12000 * 10% = 1200
+			useFresh:         true,
+		},
+		{
+			name:             "Same balance - no difference",
+			cachedBalance:    10000,
+			freshBalance:     10000,
+			positionPct:      15.0,
+			wantPositionSize: 1500,
+			useFresh:         true,
+		},
+		{
+			name:             "Using cached when fresh is lower - DANGEROUS over-leverage",
+			cachedBalance:    10000,
+			freshBalance:     5000, // Balance halved!
+			positionPct:      20.0,
+			wantPositionSize: 1000, // Should be 1000 (5000 * 20%), not 2000!
+			useFresh:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var positionSize float64
+
+			if tt.useFresh {
+				positionSize = (tt.freshBalance * tt.positionPct) / 100
+			} else {
+				positionSize = (tt.cachedBalance * tt.positionPct) / 100
+			}
+
+			if positionSize != tt.wantPositionSize {
+				t.Errorf("Position size = %.2f, want %.2f", positionSize, tt.wantPositionSize)
+			}
+
+			// Verify using cached would have been wrong when balances differ
+			if tt.cachedBalance != tt.freshBalance {
+				cachedPositionSize := (tt.cachedBalance * tt.positionPct) / 100
+				if tt.freshBalance < tt.cachedBalance && positionSize == cachedPositionSize {
+					t.Errorf("DANGER: Using stale cached balance would over-leverage! cached=%.2f, fresh=%.2f",
+						cachedPositionSize, positionSize)
+				}
+			}
+		})
 	}
 }

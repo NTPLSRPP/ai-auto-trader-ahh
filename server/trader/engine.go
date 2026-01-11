@@ -735,35 +735,31 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	leverage := e.getLeverageLimit(symbol)
 
 	// Get position percentage from strategy (fallback to legacy field, then config, then default 10%)
-	positionPct := e.getPositionPercent()
+	maxPosPct := e.getPositionPercent()
+	if e.strategy != nil && e.strategy.Config.RiskControl.MaxPositionPercent > 0 {
+		maxPosPct = e.strategy.Config.RiskControl.MaxPositionPercent
+	}
 
 	// Log balance info for debugging
 	log.Printf("[%s][%s] Balance: equity=$%.2f, available=$%.2f, leverage=%dx, positionPct=%.1f%%",
-		e.name, symbol, equity, account.AvailableBalance, leverage, positionPct)
+		e.name, symbol, equity, account.AvailableBalance, leverage, maxPosPct)
 
 	// Log decision details if reasoning provided
 	if decision.Reasoning != "" {
 		log.Printf("[%s][%s] %s Reasoning: %s", e.name, symbol, decision.Action, decision.Reasoning)
 	}
 
-	// Calculate position size based on balance and strategy config
-	// Use available balance to calculate position size
-	// Default to 10% of equity if not specified
-	// Use strategy config for max position %
-	maxPosPct := e.getPositionPercent()
-	if e.strategy != nil && e.strategy.Config.RiskControl.MaxPositionPercent > 0 {
-		maxPosPct = e.strategy.Config.RiskControl.MaxPositionPercent
-	}
-
-	// Base calculation
-	positionSizeUSD := (e.account.TotalMarginBalance * maxPosPct) / 100
+	// Calculate position size based on FRESH balance and strategy config
+	// CRITICAL: Use `account` (fresh) not `e.account` (cached) to prevent over-leveraging
+	positionSizeUSD := (account.TotalMarginBalance * maxPosPct) / 100
 
 	// Apply margin safety check (COPIED FROM NOFX)
 	// ⚠️ Auto-adjust position size if insufficient margin
 	// Formula: totalRequired = positionSize/leverage + positionSize*0.001 + positionSize/leverage*0.01
 	//        = positionSize * (1.01/leverage + 0.001)
 	marginFactor := 1.01/float64(leverage) + 0.001
-	maxAffordablePositionSize := e.account.AvailableBalance / marginFactor
+	// CRITICAL: Use fresh account.AvailableBalance, not cached e.account
+	maxAffordablePositionSize := account.AvailableBalance / marginFactor
 
 	if positionSizeUSD > maxAffordablePositionSize {
 		// Cap at max affordable - margin buffer will be applied later via applyMarginBuffer()
@@ -979,13 +975,22 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		}
 
 		// Calculate PnL percentage
+		// Calculate PnL percentage (Leveraged ROE)
 		var pnlPct float64
 		if currentPos.EntryPrice > 0 {
+			var rawPnlPct float64
 			if currentPos.PositionAmt > 0 { // Long position
-				pnlPct = ((currentPos.MarkPrice - currentPos.EntryPrice) / currentPos.EntryPrice) * 100
+				rawPnlPct = ((currentPos.MarkPrice - currentPos.EntryPrice) / currentPos.EntryPrice) * 100
 			} else { // Short position
-				pnlPct = ((currentPos.EntryPrice - currentPos.MarkPrice) / currentPos.EntryPrice) * 100
+				rawPnlPct = ((currentPos.EntryPrice - currentPos.MarkPrice) / currentPos.EntryPrice) * 100
 			}
+
+			// Apply leverage to get ROE (Return on Equity)
+			leverage := float64(currentPos.Leverage)
+			if leverage < 1 {
+				leverage = 1
+			}
+			pnlPct = rawPnlPct * leverage
 		}
 
 		// SMART LOSS MANAGEMENT V3: Stricter protection against premature exits
@@ -2278,17 +2283,23 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Calculate current P&L % (raw price movement, NOT leveraged)
-		// This matches the CLOSE action calculation and SL/TP percentages
-		// Note: The dollar P&L already reflects leverage, but percentage thresholds
-		// like noise zone (-2% to +8%) should be based on price movement
+		// Calculate current P&L % (Leveraged ROE) - matches Close logic
+		// This ensures Noise Zone, Trailing Stop, and Smart Loss thresholds work on Equity %
 		var pnlPct float64
 		if pos.EntryPrice > 0 {
+			var rawPnlPct float64
 			if pos.PositionAmt > 0 {
-				pnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * 100
+				rawPnlPct = ((pos.MarkPrice - pos.EntryPrice) / pos.EntryPrice) * 100
 			} else {
-				pnlPct = ((pos.EntryPrice - pos.MarkPrice) / pos.EntryPrice) * 100
+				rawPnlPct = ((pos.EntryPrice - pos.MarkPrice) / pos.EntryPrice) * 100
 			}
+
+			// Apply leverage to get ROE
+			leverage := float64(pos.Leverage)
+			if leverage < 1 {
+				leverage = 1
+			}
+			pnlPct = rawPnlPct * leverage
 		}
 
 		side := "LONG"
@@ -2321,7 +2332,13 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				// Calculate trailing stop level
 				trailingStopLevel := peakPnL - trailDistPct
 
-				if pnlPct <= trailingStopLevel {
+				// CRITICAL FIX: Only trigger TSL if we've actually been in profit
+				// Without this check, if activatePct=0 and price immediately drops 0.5%,
+				// TSL would trigger at a LOSS (peak=0%, trail=-0.5%, current=-0.5% <= -0.5%)
+				//
+				// The fix: TSL should only close if trailingStopLevel > 0
+				// This ensures we're locking in actual profits, not just noise losses
+				if pnlPct <= trailingStopLevel && trailingStopLevel > 0 {
 					log.Printf("[%s][%s] 📉 TRAILING STOP TRIGGERED: Peak=%.2f%%, Current=%.2f%%, TrailStop=%.2f%%",
 						e.name, pos.Symbol, peakPnL, pnlPct, trailingStopLevel)
 
