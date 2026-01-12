@@ -537,9 +537,9 @@ export default function Strategies() {
                             if (isFindingPairs || !editingStrategy) return;
                             setIsFindingPairs(true);
                             try {
-                              // Dynamic count: Max Positions (min) + 2
+                              // Dynamic count: 2x Max Positions (e.g., if max_position=2, find 4 symbols)
                               const maxPos = editingStrategy.config.risk_control.max_positions || 3;
-                              const targetCount = maxPos + 2;
+                              const targetCount = maxPos * 2;
 
                               const res = await recommendPairs({
                                 count: targetCount,
@@ -640,6 +640,56 @@ export default function Strategies() {
                         </p>
                       </div>
                     </div>
+
+                    {/* Auto Smart Find */}
+                    {editingStrategy.config.turbo_mode && (
+                      <div className="space-y-3 pt-3 border-t border-white/10">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 text-orange-400" />
+                            <Label className="text-sm font-medium">Auto Smart Find</Label>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Select
+                              value={String(editingStrategy.config.smart_find_refresh_mins || 60)}
+                              onValueChange={(v) => setEditingStrategy({
+                                ...editingStrategy,
+                                config: {
+                                  ...editingStrategy.config,
+                                  smart_find_refresh_mins: parseInt(v)
+                                }
+                              })}
+                              disabled={!editingStrategy.config.smart_find_auto_refresh}
+                            >
+                              <SelectTrigger className="w-[100px] h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="30">30 min</SelectItem>
+                                <SelectItem value="60">1 hour</SelectItem>
+                                <SelectItem value="120">2 hours</SelectItem>
+                                <SelectItem value="240">4 hours</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <input
+                              type="checkbox"
+                              checked={editingStrategy.config.smart_find_auto_refresh || false}
+                              onChange={(e) => setEditingStrategy({
+                                ...editingStrategy,
+                                config: {
+                                  ...editingStrategy.config,
+                                  smart_find_auto_refresh: e.target.checked
+                                }
+                              })}
+                              className="w-4 h-4 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/20"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Automatically cycle to find new risky symbols at set intervals. Analyzes open positions first, then finds {(editingStrategy.config.risk_control.max_positions || 3) * 2} new symbols.
+                        </p>
+                      </div>
+                    )}
 
                   </CollapsibleSection>
 

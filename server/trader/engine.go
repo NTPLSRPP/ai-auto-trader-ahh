@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -79,6 +80,9 @@ type Engine struct {
 	// Dynamic Coin Source Cache
 	dynamicCoins       []string
 	lastDynamicRefresh time.Time
+
+	// Smart Find Auto-Refresh
+	lastSmartFindRefresh time.Time
 }
 
 // BracketOrderIDs tracks stop-loss and take-profit order IDs for a position
@@ -323,6 +327,181 @@ func (e *Engine) getTradingInterval() time.Duration {
 	return time.Duration(e.cfg.TradingInterval) * time.Minute
 }
 
+// maybeRefreshSmartFind checks if it's time to auto-refresh Smart Find coins
+// and updates the strategy's static_coins if needed.
+// This analyzes open positions first, then finds new risky symbols.
+func (e *Engine) maybeRefreshSmartFind(ctx context.Context) {
+	if e.strategy == nil {
+		return
+	}
+
+	// Check if Smart Find auto-refresh is enabled
+	if !e.strategy.Config.SmartFindAutoRefresh {
+		return
+	}
+
+	// Get refresh interval (default 60 mins)
+	refreshMins := e.strategy.Config.SmartFindRefreshMins
+	if refreshMins <= 0 {
+		refreshMins = 60
+	}
+
+	// Check if enough time has passed
+	if time.Since(e.lastSmartFindRefresh) < time.Duration(refreshMins)*time.Minute {
+		return
+	}
+
+	log.Printf("[%s] 🔍 Smart Find Auto-Refresh triggered (interval: %d mins)", e.name, refreshMins)
+
+	// Get max positions to calculate target count (2x max positions)
+	maxPositions := 3
+	if e.strategy.Config.RiskControl.MaxPositions > 0 {
+		maxPositions = e.strategy.Config.RiskControl.MaxPositions
+	}
+	targetCount := maxPositions * 2
+
+	// Perform Smart Find
+	newCoins, err := e.runSmartFind(ctx, targetCount)
+	if err != nil {
+		log.Printf("[%s] ⚠️ Smart Find Auto-Refresh failed: %v", e.name, err)
+		return
+	}
+
+	// Update strategy's static coins
+	e.mu.Lock()
+	e.strategy.Config.CoinSource.StaticCoins = newCoins
+	e.strategy.Config.CoinSource.SourceType = "static"
+	e.lastSmartFindRefresh = time.Now()
+	e.mu.Unlock()
+
+	log.Printf("[%s] ✅ Smart Find Auto-Refresh complete. New coins: %v", e.name, newCoins)
+}
+
+// runSmartFind finds risky symbols using AI analysis
+func (e *Engine) runSmartFind(ctx context.Context, targetCount int) ([]string, error) {
+	// 1. Get 24h tickers from Binance
+	tickers, err := e.binance.Get24hTicker(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch market data: %w", err)
+	}
+
+	// 2. Get account info for balance context
+	account, err := e.binance.GetAccountInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch account info: %w", err)
+	}
+
+	// 3. Filter and prepare candidates
+	type MarketCoin struct {
+		Symbol      string
+		PriceChange float64
+		Volume      float64
+		QuoteVolume float64
+	}
+
+	var candidates []MarketCoin
+	for _, t := range tickers {
+		// Basic filter: USDT pairs, reasonable volume
+		if len(t.Symbol) > 4 && t.Symbol[len(t.Symbol)-4:] == "USDT" {
+			// Ensure symbol is actively trading (Futures)
+			if !e.binance.IsActiveSymbol(t.Symbol) {
+				continue
+			}
+
+			// Skip stables
+			if t.Symbol == "USDCUSDT" || t.Symbol == "FDUSDUSDT" || t.Symbol == "TUSDUSDT" || t.Symbol == "USDPUSDT" {
+				continue
+			}
+
+			// Only consider decent volume (>500k)
+			if t.QuoteVolume > 500000 {
+				candidates = append(candidates, MarketCoin{
+					Symbol:      t.Symbol,
+					PriceChange: t.PriceChange,
+					Volume:      t.Volume,
+					QuoteVolume: t.QuoteVolume,
+				})
+			}
+		}
+	}
+
+	// 4. Build prompt based on Turbo Mode
+	var prompt string
+	isTurbo := e.strategy.Config.TurboMode
+
+	if isTurbo {
+		// TURBO MODE: Sort by Volatility (Absolute Price Change)
+		sort.Slice(candidates, func(i, j int) bool {
+			absI := candidates[i].PriceChange
+			if absI < 0 {
+				absI = -absI
+			}
+			absJ := candidates[j].PriceChange
+			if absJ < 0 {
+				absJ = -absJ
+			}
+			return absI > absJ
+		})
+		if len(candidates) > 30 {
+			candidates = candidates[:30]
+		}
+
+		prompt = fmt.Sprintf(`You are a HIGH RISK crypto degen trader.
+My current balance: $%.2f
+Objective: Find the %d MOST EXPLOSIVE trading pairs for aggressive scalping. I am willing to take extreme risks (80-90%% loss) for high rewards.
+Criteria: High Volatility, Momentum, Meme Coins, or Breakout candidates. Ignore safety.
+
+Here are the Top 30 pairs by Volatility (Price Change):
+`, account.TotalWalletBalance, targetCount)
+	} else {
+		// STANDARD MODE: Sort by Volume (Safety)
+		sort.Slice(candidates, func(i, j int) bool {
+			return candidates[i].QuoteVolume > candidates[j].QuoteVolume
+		})
+		if len(candidates) > 30 {
+			candidates = candidates[:30]
+		}
+
+		prompt = fmt.Sprintf(`You are a crypto trading expert.
+My current balance: $%.2f
+Objective: Find the best %d trading pairs for high-probability scalping/day-trading.
+Criteria: High liquidity, good volatility (but not insane/manipulated), clear trends.
+
+Here are the Top 30 pairs by 24h Volume:
+`, account.TotalWalletBalance, targetCount)
+	}
+
+	for _, c := range candidates {
+		prompt += fmt.Sprintf("- %s: Vol=$%.0fM, Chg=%.2f%%\n", c.Symbol, c.QuoteVolume/1000000, c.PriceChange)
+	}
+
+	prompt += fmt.Sprintf(`
+Return ONLY a JSON array of strings with the selected %d symbols. Example: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+Result:`, targetCount)
+
+	// 5. Call AI
+	response, err := e.mcpClient.CallWithMessages("You are a smart crypto trading assistant.", prompt)
+	if err != nil {
+		return nil, fmt.Errorf("AI request failed: %w", err)
+	}
+
+	// 6. Parse Response (Extract JSON array)
+	jsonStr := response
+	if idx := strings.Index(jsonStr, "["); idx != -1 {
+		jsonStr = jsonStr[idx:]
+	}
+	if idx := strings.LastIndex(jsonStr, "]"); idx != -1 {
+		jsonStr = jsonStr[:idx+1]
+	}
+
+	var recommended []string
+	if err := json.Unmarshal([]byte(jsonStr), &recommended); err != nil {
+		return nil, fmt.Errorf("failed to parse AI response: %w", err)
+	}
+
+	return recommended, nil
+}
+
 func (e *Engine) getMinConfidence() int {
 	if e.strategy != nil {
 		return e.strategy.Config.RiskControl.MinConfidence
@@ -422,6 +601,10 @@ func (e *Engine) runTradingCycle(ctx context.Context) {
 		}
 		e.mu.Unlock()
 	}
+
+	// Smart Find Auto-Refresh: Check if it's time to find new symbols
+	// This runs AFTER positions are updated so we know our current state
+	e.maybeRefreshSmartFind(ctx)
 
 	// Determine pairs to analyze (Optimize AI Token Usage)
 	var pairsToAnalyze []string

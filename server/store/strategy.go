@@ -48,6 +48,10 @@ type StrategyConfig struct {
 
 	// Trading Mode: "strategy" (default) or "copy_trade"
 	TradingMode string `json:"trading_mode"`
+
+	// Smart Find Auto-Refresh (cycles to find new risky symbols periodically)
+	SmartFindAutoRefresh   bool `json:"smart_find_auto_refresh"`   // Enable auto-refresh of smart find
+	SmartFindRefreshMins   int  `json:"smart_find_refresh_mins"`   // Interval in minutes (30, 60, 120, etc.)
 }
 
 // AIConfig defines AI model settings
@@ -252,6 +256,10 @@ func DefaultStrategyConfig() StrategyConfig {
 		},
 		CustomPrompt:    "",
 		TradingInterval: 5,
+
+		// Smart Find Auto-Refresh (disabled by default - opt-in)
+		SmartFindAutoRefresh: false,
+		SmartFindRefreshMins: 60, // Default: 1 hour
 	}
 }
 

@@ -18,6 +18,9 @@ export interface StrategyConfig {
   turbo_mode: boolean;
   simple_mode?: boolean;
   trading_mode?: 'strategy' | 'copy_trade';
+  // Smart Find Auto-Refresh
+  smart_find_auto_refresh?: boolean;
+  smart_find_refresh_mins?: number;
 }
 
 export interface AIConfig {
