@@ -291,7 +291,7 @@ func (e *Engine) getTradingPairs() []string {
 		sourceType := e.strategy.Config.CoinSource.SourceType
 
 		// If dynamic source is selected
-		if sourceType == "volume_top" || sourceType == "oi_top" || sourceType == "dynamic" {
+		if sourceType == "volume_top" || sourceType == "top_volume" || sourceType == "oi_top" || sourceType == "dynamic" {
 			// Refresh cache if older than 5 minutes or empty
 			if time.Since(e.lastDynamicRefresh) > 5*time.Minute || len(e.dynamicCoins) == 0 {
 				log.Printf("[%s] Refreshing top volume coins...", e.name)
