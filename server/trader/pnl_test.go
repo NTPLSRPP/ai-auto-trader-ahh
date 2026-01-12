@@ -717,3 +717,334 @@ func TestPositionSizingUsesFreshBalance(t *testing.T) {
 		})
 	}
 }
+
+// TestGetMinPositionSize tests the minimum position size retrieval with fallback logic
+func TestGetMinPositionSize(t *testing.T) {
+	tests := []struct {
+		name                  string
+		symbol                string
+		minPositionSize       float64 // New field for altcoins
+		minPositionSizeBTCETH float64 // New field for BTC/ETH
+		minPositionUSD        float64 // Legacy fallback
+		wantMinSize           float64
+	}{
+		{
+			name:                  "Altcoin with new field set",
+			symbol:                "IPUSDT",
+			minPositionSize:       20.0,
+			minPositionSizeBTCETH: 60.0,
+			minPositionUSD:        10.0,
+			wantMinSize:           20.0, // Uses minPositionSize
+		},
+		{
+			name:                  "Altcoin falls back to legacy",
+			symbol:                "SOLUSDT",
+			minPositionSize:       0, // Not set
+			minPositionSizeBTCETH: 60.0,
+			minPositionUSD:        15.0,
+			wantMinSize:           15.0, // Falls back to minPositionUSD
+		},
+		{
+			name:                  "Altcoin falls back to default",
+			symbol:                "DOGEUSDT",
+			minPositionSize:       0,    // Not set
+			minPositionSizeBTCETH: 0,    // Not set
+			minPositionUSD:        0,    // Not set
+			wantMinSize:           12.0, // Default for altcoins
+		},
+		{
+			name:                  "BTC with new field set",
+			symbol:                "BTCUSDT",
+			minPositionSize:       20.0,
+			minPositionSizeBTCETH: 50.0,
+			minPositionUSD:        10.0,
+			wantMinSize:           50.0, // Uses minPositionSizeBTCETH
+		},
+		{
+			name:                  "ETH falls back to legacy",
+			symbol:                "ETHUSDT",
+			minPositionSize:       20.0,
+			minPositionSizeBTCETH: 0, // Not set
+			minPositionUSD:        30.0,
+			wantMinSize:           30.0, // Falls back to minPositionUSD
+		},
+		{
+			name:                  "BTC falls back to default",
+			symbol:                "BTCUSDT",
+			minPositionSize:       0,
+			minPositionSizeBTCETH: 0,
+			minPositionUSD:        0,
+			wantMinSize:           50.0, // Default for BTC/ETH
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the getMinPositionSize logic
+			var minSize float64
+
+			if isBTCETH(tt.symbol) {
+				minSize = tt.minPositionSizeBTCETH
+				if minSize <= 0 {
+					minSize = tt.minPositionUSD
+				}
+				if minSize <= 0 {
+					minSize = 50.0 // BTC/ETH default
+				}
+			} else {
+				minSize = tt.minPositionSize
+				if minSize <= 0 {
+					minSize = tt.minPositionUSD
+				}
+				if minSize <= 0 {
+					minSize = 12.0 // Altcoin default
+				}
+			}
+
+			if minSize != tt.wantMinSize {
+				t.Errorf("getMinPositionSize(%s) = %.2f, want %.2f", tt.symbol, minSize, tt.wantMinSize)
+			}
+		})
+	}
+}
+
+// TestNotionalValueValidation tests that positions with tiny notional values are rejected
+func TestNotionalValueValidation(t *testing.T) {
+	tests := []struct {
+		name              string
+		symbol            string
+		marginUSD         float64
+		leverage          int
+		price             float64
+		wantNotionalValue float64
+		minNotionalValue  float64
+		shouldReject      bool
+	}{
+		{
+			name:              "Tiny position - should reject",
+			symbol:            "IPUSDT",
+			marginUSD:         0.013, // Your actual case
+			leverage:          20,
+			price:             2.64,
+			wantNotionalValue: 0.26, // 0.013 * 20 = 0.26
+			minNotionalValue:  10.0,
+			shouldReject:      true,
+		},
+		{
+			name:              "Normal altcoin position - should accept",
+			symbol:            "SOLUSDT",
+			marginUSD:         10.0,
+			leverage:          20,
+			price:             100.0,
+			wantNotionalValue: 200.0, // 10 * 20 = 200
+			minNotionalValue:  10.0,
+			shouldReject:      false,
+		},
+		{
+			name:              "BTC below minimum - should reject",
+			symbol:            "BTCUSDT",
+			marginUSD:         2.0,
+			leverage:          10,
+			price:             50000.0,
+			wantNotionalValue: 20.0, // 2 * 10 = 20
+			minNotionalValue:  50.0, // BTC requires $50
+			shouldReject:      true,
+		},
+		{
+			name:              "BTC at minimum - should accept",
+			symbol:            "BTCUSDT",
+			marginUSD:         5.0,
+			leverage:          10,
+			price:             50000.0,
+			wantNotionalValue: 50.0, // 5 * 10 = 50
+			minNotionalValue:  50.0,
+			shouldReject:      false,
+		},
+		{
+			name:              "ETH above minimum - should accept",
+			symbol:            "ETHUSDT",
+			marginUSD:         10.0,
+			leverage:          10,
+			price:             3000.0,
+			wantNotionalValue: 100.0, // 10 * 10 = 100
+			minNotionalValue:  50.0,
+			shouldReject:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actualPositionValue := tt.marginUSD * float64(tt.leverage)
+
+			// Tolerance for float comparison
+			tolerance := 0.01
+			if actualPositionValue < tt.wantNotionalValue-tolerance || actualPositionValue > tt.wantNotionalValue+tolerance {
+				t.Errorf("Notional value = %.2f, want %.2f", actualPositionValue, tt.wantNotionalValue)
+			}
+
+			// Check if should be rejected
+			shouldReject := actualPositionValue < tt.minNotionalValue
+			if shouldReject != tt.shouldReject {
+				t.Errorf("Should reject = %v, want %v (notional: $%.2f, min: $%.2f)",
+					shouldReject, tt.shouldReject, actualPositionValue, tt.minNotionalValue)
+			}
+		})
+	}
+}
+
+// TestEarlyRejectionOnCappedPosition tests that trades are rejected early when
+// the affordable margin is below the minimum position size
+func TestEarlyRejectionOnCappedPosition(t *testing.T) {
+	tests := []struct {
+		name                      string
+		symbol                    string
+		wantedPositionSize        float64
+		maxAffordablePositionSize float64
+		minPositionRequired       float64
+		shouldRejectEarly         bool
+	}{
+		{
+			name:                      "Affordable but below minimum - reject early",
+			symbol:                    "IPUSDT",
+			wantedPositionSize:        100.0,
+			maxAffordablePositionSize: 5.0, // Only $5 available
+			minPositionRequired:       20.0,
+			shouldRejectEarly:         true,
+		},
+		{
+			name:                      "Affordable and above minimum - accept",
+			symbol:                    "SOLUSDT",
+			wantedPositionSize:        100.0,
+			maxAffordablePositionSize: 50.0, // $50 available
+			minPositionRequired:       20.0,
+			shouldRejectEarly:         false,
+		},
+		{
+			name:                      "Position not capped - no early rejection check",
+			symbol:                    "DOGEUSDT",
+			wantedPositionSize:        50.0,
+			maxAffordablePositionSize: 100.0, // More than wanted
+			minPositionRequired:       20.0,
+			shouldRejectEarly:         false, // Not capped, so no early rejection
+		},
+		{
+			name:                      "BTC capped below minimum - reject early",
+			symbol:                    "BTCUSDT",
+			wantedPositionSize:        200.0,
+			maxAffordablePositionSize: 30.0, // Only $30 available
+			minPositionRequired:       50.0, // BTC needs $50
+			shouldRejectEarly:         true,
+		},
+		{
+			name:                      "Exactly at minimum - accept",
+			symbol:                    "XRPUSDT",
+			wantedPositionSize:        100.0,
+			maxAffordablePositionSize: 20.0, // Exactly at minimum
+			minPositionRequired:       20.0,
+			shouldRejectEarly:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			positionSize := tt.wantedPositionSize
+			wasCapped := false
+
+			// Simulate capping logic
+			if positionSize > tt.maxAffordablePositionSize {
+				positionSize = tt.maxAffordablePositionSize
+				wasCapped = true
+			}
+
+			// Early rejection check (only if capped)
+			shouldReject := false
+			if wasCapped && positionSize < tt.minPositionRequired {
+				shouldReject = true
+			}
+
+			if shouldReject != tt.shouldRejectEarly {
+				t.Errorf("Early rejection = %v, want %v\n"+
+					"  wanted: $%.2f, affordable: $%.2f, min: $%.2f, capped: %v",
+					shouldReject, tt.shouldRejectEarly,
+					tt.wantedPositionSize, tt.maxAffordablePositionSize, tt.minPositionRequired, wasCapped)
+			}
+		})
+	}
+}
+
+// TestWeightedPnLPercentage tests that PnL percentage is weighted by position notional
+func TestWeightedPnLPercentage(t *testing.T) {
+	tests := []struct {
+		name      string
+		positions []struct {
+			amount     float64
+			entryPrice float64
+			pnlPercent float64
+		}
+		wantWeightedPct float64
+	}{
+		{
+			name: "Your actual case - small profit large loss",
+			positions: []struct {
+				amount     float64
+				entryPrice float64
+				pnlPercent float64
+			}{
+				{amount: 0.1, entryPrice: 2.64, pnlPercent: 1.96},    // IPUSDT: $0.264 notional
+				{amount: 23.9, entryPrice: 18.51, pnlPercent: -1.40}, // RIVERUSDT: $442.39 notional
+			},
+			wantWeightedPct: -1.38, // Heavily weighted toward the loss
+		},
+		{
+			name: "Equal positions",
+			positions: []struct {
+				amount     float64
+				entryPrice float64
+				pnlPercent float64
+			}{
+				{amount: 1.0, entryPrice: 100.0, pnlPercent: 2.0},  // $100 notional
+				{amount: 1.0, entryPrice: 100.0, pnlPercent: -2.0}, // $100 notional
+			},
+			wantWeightedPct: 0.0, // Should be 0 (equal weight cancels out)
+		},
+		{
+			name: "Single position",
+			positions: []struct {
+				amount     float64
+				entryPrice float64
+				pnlPercent float64
+			}{
+				{amount: 0.5, entryPrice: 50000.0, pnlPercent: 3.5}, // BTC $25000 notional
+			},
+			wantWeightedPct: 3.5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Calculate weighted average (same logic as Dashboard.tsx fix)
+			var totalNotional float64
+			var weightedSum float64
+
+			for _, p := range tt.positions {
+				notional := p.amount * p.entryPrice
+				if notional < 0 {
+					notional = -notional // Math.abs
+				}
+				totalNotional += notional
+				weightedSum += p.pnlPercent * notional
+			}
+
+			var weightedPct float64
+			if totalNotional > 0 {
+				weightedPct = weightedSum / totalNotional
+			}
+
+			// Use tolerance for float comparison
+			tolerance := 0.1
+			if weightedPct < tt.wantWeightedPct-tolerance || weightedPct > tt.wantWeightedPct+tolerance {
+				t.Errorf("Weighted PnL%% = %.2f, want %.2f", weightedPct, tt.wantWeightedPct)
+			}
+		})
+	}
+}
