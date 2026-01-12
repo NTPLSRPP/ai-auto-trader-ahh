@@ -950,6 +950,18 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 		log.Printf("[%s][%s] ⚠️ Position size $%.2f exceeds max affordable $%.2f, capping to max",
 			e.name, symbol, positionSizeUSD, maxAffordablePositionSize)
 		positionSizeUSD = maxAffordablePositionSize
+
+		// CRITICAL: Reject immediately if capped position is below minimum
+		// This prevents opening tiny unprofitable positions
+		if isOpenAction && !hasPosition {
+			minRequired := e.getMinPositionSize(symbol)
+			if positionSizeUSD < minRequired {
+				log.Printf("[%s][%s] ❌ REJECTED: Affordable margin $%.2f is below minimum $%.2f. Increase balance or reduce other positions.",
+					e.name, symbol, positionSizeUSD, minRequired)
+				return 0, fmt.Errorf("skipped: insufficient margin ($%.2f available, need $%.2f minimum for %s)",
+					positionSizeUSD, minRequired, symbol)
+			}
+		}
 	}
 
 	if isOpenAction && !hasPosition {
@@ -985,6 +997,18 @@ func (e *Engine) executeTrade(ctx context.Context, symbol string, decision *ai.T
 	if !isBTCETH(symbol) {
 		// For altcoins, calculate based on a reasonable minimum notional ($10)
 		minQuantity = 10.0 / ticker.Price
+	}
+
+	// VALIDATION: Ensure notional value is large enough to be profitable after fees
+	// Binance fees are ~0.04% maker / 0.05% taker, so we need at least $5-10 notional
+	// to have any chance of profit after entry + exit fees
+	minNotionalValue := 10.0 // Minimum $10 notional for profitable trading
+	if isBTCETH(symbol) {
+		minNotionalValue = 50.0 // BTC/ETH require $50 minimum on Binance
+	}
+	if actualPositionValue < minNotionalValue {
+		return 0, fmt.Errorf("skipped: position notional $%.2f below minimum $%.2f for %s (margin $%.2f × %dx = $%.2f). Increase balance or position %%",
+			actualPositionValue, minNotionalValue, symbol, positionSizeUSD, leverage, actualPositionValue)
 	}
 
 	if quantity < minQuantity {
@@ -1717,36 +1741,49 @@ func (e *Engine) enforceMinPositionSize(positionSizeUSD float64, symbol string) 
 		return nil
 	}
 
-	rc := e.strategy.Config.RiskControl
-	var minSize float64
+	minSize := e.getMinPositionSize(symbol)
 
-	if isBTCETH(symbol) {
-		// Try new field first
-		minSize = rc.MinPositionSizeBTCETH
-		if minSize <= 0 {
-			// Fallback to legacy MinPositionUSD
-			minSize = rc.MinPositionUSD
-		}
-		if minSize <= 0 {
-			minSize = 10.0 // Default $10 for BTC/ETH (adjusted for small account)
-		}
-	} else {
-		// Try new field first
-		minSize = rc.MinPositionSize
-		if minSize <= 0 {
-			// Fallback to legacy MinPositionUSD
-			minSize = rc.MinPositionUSD
-		}
-		if minSize <= 0 {
-			minSize = 10.0 // Default $10 for altcoins
-		}
-	}
+	log.Printf("[%s] enforceMinPositionSize: positionSize=$%.2f, minRequired=$%.2f for %s",
+		e.name, positionSizeUSD, minSize, symbol)
 
 	if positionSizeUSD < minSize {
 		return fmt.Errorf("position size $%.2f below minimum $%.2f for %s", positionSizeUSD, minSize, symbol)
 	}
 
 	return nil
+}
+
+// getMinPositionSize returns the minimum position size for a symbol
+func (e *Engine) getMinPositionSize(symbol string) float64 {
+	if e.strategy == nil {
+		return 10.0 // Default fallback
+	}
+
+	rc := e.strategy.Config.RiskControl
+	var minSize float64
+
+	if isBTCETH(symbol) {
+		minSize = rc.MinPositionSizeBTCETH
+		if minSize <= 0 {
+			minSize = rc.MinPositionUSD
+		}
+		if minSize <= 0 {
+			minSize = 50.0 // BTC/ETH default
+		}
+	} else {
+		minSize = rc.MinPositionSize
+		if minSize <= 0 {
+			minSize = rc.MinPositionUSD
+		}
+		if minSize <= 0 {
+			minSize = 12.0 // Altcoin default
+		}
+	}
+
+	log.Printf("[DEBUG] getMinPositionSize(%s): MinPositionSize=%.2f, MinPositionSizeBTCETH=%.2f, MinPositionUSD=%.2f → result=%.2f",
+		symbol, rc.MinPositionSize, rc.MinPositionSizeBTCETH, rc.MinPositionUSD, minSize)
+
+	return minSize
 }
 
 // enforceMaxPositions checks if we've reached max positions

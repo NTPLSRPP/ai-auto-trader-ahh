@@ -155,9 +155,14 @@ export default function Dashboard() {
   }
 
   const totalPnL = positions.reduce((sum, p) => sum + p.pnl, 0);
+  // Calculate weighted average PnL% based on position notional values
+  const totalNotional = positions.reduce((sum, p) => sum + Math.abs(p.amount * p.entry_price), 0);
   const totalPnLPercent =
-    positions.length > 0
-      ? positions.reduce((sum, p) => sum + p.pnl_percent, 0) / positions.length
+    totalNotional > 0
+      ? positions.reduce((sum, p) => {
+        const notional = Math.abs(p.amount * p.entry_price);
+        return sum + (p.pnl_percent * notional);
+      }, 0) / totalNotional
       : 0;
 
   return (
