@@ -425,27 +425,29 @@ func (e *Engine) runSmartFind(ctx context.Context, targetCount int) ([]string, e
 		}
 	}
 
-	// 4. Build prompt based on Turbo Mode
+	// 4. Build prompt - Always sort by volatility for Smart Find (find movers, not just safe coins)
+	// Turbo Mode only affects the risk tolerance in the prompt
 	var prompt string
 	isTurbo := e.strategy.Config.TurboMode
 
-	if isTurbo {
-		// TURBO MODE: Sort by Volatility (Absolute Price Change)
-		sort.Slice(candidates, func(i, j int) bool {
-			absI := candidates[i].PriceChange
-			if absI < 0 {
-				absI = -absI
-			}
-			absJ := candidates[j].PriceChange
-			if absJ < 0 {
-				absJ = -absJ
-			}
-			return absI > absJ
-		})
-		if len(candidates) > 30 {
-			candidates = candidates[:30]
+	// Smart Find always prioritizes volatility - we want coins that are MOVING
+	sort.Slice(candidates, func(i, j int) bool {
+		absI := candidates[i].PriceChange
+		if absI < 0 {
+			absI = -absI
 		}
+		absJ := candidates[j].PriceChange
+		if absJ < 0 {
+			absJ = -absJ
+		}
+		return absI > absJ
+	})
+	if len(candidates) > 30 {
+		candidates = candidates[:30]
+	}
 
+	if isTurbo {
+		// TURBO MODE: Aggressive, ignore safety
 		prompt = fmt.Sprintf(`You are a HIGH RISK crypto degen trader.
 My current balance: $%.2f
 Objective: Find the %d MOST EXPLOSIVE trading pairs for aggressive scalping. I am willing to take extreme risks (80-90%% loss) for high rewards.
@@ -454,20 +456,13 @@ Criteria: High Volatility, Momentum, Meme Coins, or Breakout candidates. Ignore 
 Here are the Top 30 pairs by Volatility (Price Change):
 `, account.TotalWalletBalance, targetCount)
 	} else {
-		// STANDARD MODE: Sort by Volume (Safety)
-		sort.Slice(candidates, func(i, j int) bool {
-			return candidates[i].QuoteVolume > candidates[j].QuoteVolume
-		})
-		if len(candidates) > 30 {
-			candidates = candidates[:30]
-		}
-
+		// STANDARD MODE: Still find volatile coins, but with some risk awareness
 		prompt = fmt.Sprintf(`You are a crypto trading expert.
 My current balance: $%.2f
-Objective: Find the best %d trading pairs for high-probability scalping/day-trading.
-Criteria: High liquidity, good volatility (but not insane/manipulated), clear trends.
+Objective: Find the %d best trading pairs with good momentum for scalping/day-trading.
+Criteria: Look for coins with significant price movement, clear trends, and reasonable volume. Avoid extremely low liquidity coins.
 
-Here are the Top 30 pairs by 24h Volume:
+Here are the Top 30 pairs by Volatility (Price Change):
 `, account.TotalWalletBalance, targetCount)
 	}
 
