@@ -2332,7 +2332,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		holdDuration := e.GetHoldDuration(pos.Symbol, side)
 
 		// =====================================================================
-		// 1. TRAILING STOP LOSS - Lock in profits (Uses ROE %)
+		// 1. TRAILING STOP LOSS - Lock in profits (Uses Raw % - same scale as Noise Zone)
 		// =====================================================================
 		if rc.EnableTrailingStop {
 			// activatePct: Set to 0 to activate immediately from entry (aggressive)
@@ -2344,8 +2344,8 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				trailDistPct = 0.5
 			}
 
-			// Update and get peak P&L (Using ROE)
-			e.UpdatePeakPnL(pos.Symbol, side, roePnlPct)
+			// Update and get peak P&L (Using Raw % - consistent with Noise Zone)
+			e.UpdatePeakPnL(pos.Symbol, side, rawPnlPct)
 			peakPnL := e.GetPeakPnL(pos.Symbol, side)
 
 			// Check if trailing stop should activate
@@ -2354,9 +2354,9 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				// Calculate trailing stop level
 				trailingStopLevel := peakPnL - trailDistPct
 
-				if roePnlPct <= trailingStopLevel {
-					log.Printf("[%s][%s] 📉 TRAILING STOP TRIGGERED: Peak=%.2f%%, Current=%.2f%%, TrailStop=%.2f%% (ROE)",
-						e.name, pos.Symbol, peakPnL, roePnlPct, trailingStopLevel)
+				if rawPnlPct <= trailingStopLevel {
+					log.Printf("[%s][%s] 📉 TRAILING STOP TRIGGERED: Peak=%.2f%%, Current=%.2f%%, TrailStop=%.2f%% (Raw)",
+						e.name, pos.Symbol, peakPnL, rawPnlPct, trailingStopLevel)
 
 					if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
 						log.Printf("[%s][%s] Failed to close position (trailing stop): %v", e.name, pos.Symbol, err)
@@ -2388,7 +2388,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 				if _, err := e.binance.ClosePosition(ctx, pos.Symbol, pos.PositionAmt); err != nil {
 					log.Printf("[%s][%s] Failed to close position (max hold): %v", e.name, pos.Symbol, err)
 				} else {
-					log.Printf("[%s][%s] ✅ Closed position due to max hold duration. PnL: %.2f%% (ROE)", e.name, pos.Symbol, roePnlPct)
+					log.Printf("[%s][%s] ✅ Closed position due to max hold duration. PnL: %.2f%% (Raw)", e.name, pos.Symbol, rawPnlPct)
 					e.clearPositionTracking(pos.Symbol, side)
 					e.cancelBracketOrders(ctx, pos.Symbol)
 				}
@@ -2430,7 +2430,7 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 		}
 
 		// =====================================================================
-		// 4. DRAWDOWN PROTECTION (Uses ROE %)
+		// 4. DRAWDOWN PROTECTION (Uses Raw % - same scale as Noise Zone & Trailing Stop)
 		// =====================================================================
 		// In Simple Mode, we skip ONLY this automatic drawdown protection
 		// (features 1-3 above are explicitly enabled by user, so they still run)
@@ -2438,25 +2438,25 @@ func (e *Engine) checkPositionDrawdown(ctx context.Context) {
 			continue
 		}
 
-		// Update peak P&L (Using ROE)
-		e.UpdatePeakPnL(pos.Symbol, side, roePnlPct)
+		// Update peak P&L (Using Raw % - consistent with other features)
+		e.UpdatePeakPnL(pos.Symbol, side, rawPnlPct)
 		peakPnL := e.GetPeakPnL(pos.Symbol, side)
 
-		// Only apply drawdown protection if we were profitable (in ROE terms)
+		// Only apply drawdown protection if we were profitable (in Raw % terms)
 		if peakPnL < minProfitForDrawdown {
 			continue
 		}
 
 		// Calculate drawdown from peak (relative percentage, matching NOFX)
-		// Using ROE values
+		// Using Raw % values
 		var drawdownPct float64
-		if peakPnL > 0 && roePnlPct < peakPnL {
-			drawdownPct = ((peakPnL - roePnlPct) / peakPnL) * 100
+		if peakPnL > 0 && rawPnlPct < peakPnL {
+			drawdownPct = ((peakPnL - rawPnlPct) / peakPnL) * 100
 		}
 
 		if drawdownPct >= drawdownThreshold {
-			log.Printf("[%s][%s] Drawdown alert: Peak=%.2f%%, Current=%.2f%%, Drawdown=%.2f%% >= %.2f%% (ROE)",
-				e.name, pos.Symbol, peakPnL, roePnlPct, drawdownPct, drawdownThreshold)
+			log.Printf("[%s][%s] Drawdown alert: Peak=%.2f%%, Current=%.2f%%, Drawdown=%.2f%% >= %.2f%% (Raw)",
+				e.name, pos.Symbol, peakPnL, rawPnlPct, drawdownPct, drawdownThreshold)
 
 			// Close the position
 			log.Printf("[%s][%s] Closing position due to drawdown protection", e.name, pos.Symbol)

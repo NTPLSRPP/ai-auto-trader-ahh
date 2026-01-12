@@ -1182,7 +1182,7 @@ export default function Strategies() {
                           {editingStrategy.config.risk_control.enable_trailing_stop && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                               <div className="space-y-2">
-                                <Label className="text-xs">Activate at Profit %</Label>
+                                <Label className="text-xs">Activate at Price %</Label>
                                 <Input
                                   type="number"
                                   step="0.1"
@@ -1200,6 +1200,7 @@ export default function Strategies() {
                                   className="glass h-8 text-sm"
                                   placeholder="1.0"
                                 />
+                                <p className="text-[10px] text-muted-foreground">Price move to activate (not ROE)</p>
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-xs">Trail Distance %</Label>
@@ -1220,6 +1221,7 @@ export default function Strategies() {
                                   className="glass h-8 text-sm"
                                   placeholder="0.5"
                                 />
+                                <p className="text-[10px] text-muted-foreground">Trail behind peak price</p>
                               </div>
                             </div>
                           )}
@@ -1321,7 +1323,7 @@ export default function Strategies() {
                                 />
                               </div>
                               <div className="space-y-2">
-                                <Label className="text-xs">Loss Threshold %</Label>
+                                <Label className="text-xs">Loss Threshold (Price %)</Label>
                                 <Input
                                   type="number"
                                   step="0.1"
@@ -1340,6 +1342,7 @@ export default function Strategies() {
                                   className="glass h-8 text-sm"
                                   placeholder="-1.0"
                                 />
+                                <p className="text-[10px] text-muted-foreground">Raw price move, not ROE</p>
                               </div>
                             </div>
                           )}
@@ -1370,7 +1373,7 @@ export default function Strategies() {
                           {editingStrategy.config.risk_control.enable_noise_zone_protection && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                               <div className="space-y-2">
-                                <Label className="text-xs">Lower Bound %</Label>
+                                <Label className="text-xs">Lower Bound (Price %)</Label>
                                 <Input
                                   type="number"
                                   step="0.1"
@@ -1392,7 +1395,7 @@ export default function Strategies() {
                                 <p className="text-[10px] text-muted-foreground">Below this = allow loss cut</p>
                               </div>
                               <div className="space-y-2">
-                                <Label className="text-xs">Upper Bound %</Label>
+                                <Label className="text-xs">Upper Bound (Price %)</Label>
                                 <Input
                                   type="number"
                                   step="0.1"
